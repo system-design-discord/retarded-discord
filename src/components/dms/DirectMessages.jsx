@@ -1,12 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const DirectMessages = () => {
   const navigate = useNavigate();
+  const [conversations, setConversations] = useState([]);
+  const [activeChat, setActiveChat] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+
+  const handleSendMessage = (e) => {
+    e.preventDefault();
+    if (!newMessage.trim()) return;
+    // API logic to send message
+    setNewMessage('');
+  };
 
   return (
     <div className="groups-dashboard" style={{ flexDirection: 'row', padding: 0 }}>
-      {/* Global Navigation */}
       <aside className="groups-sidebar" style={{ width: '200px' }}>
         <h3 style={{ marginBottom: '16px' }}>Navigation</h3>
         <ul className="group-list">
@@ -21,39 +31,58 @@ const DirectMessages = () => {
         </ul>
       </aside>
 
-      {/* DM Sidebar */}
       <aside className="groups-sidebar" style={{ borderLeft: '1px solid var(--border-color)' }}>
         <h3 style={{ marginBottom: '16px' }}>Conversations</h3>
         <input type="text" placeholder="Search DMs" style={{ width: '90%', marginBottom: '16px', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)' }} />
         <ul className="group-list">
-          <li className="active"><strong>Sam Lee</strong> <br/><span style={{fontSize: '12px', color: 'var(--text-secondary)'}}>● Online</span></li>
-          <li><strong>Maria Chen</strong> <br/><span style={{fontSize: '12px', color: 'var(--text-secondary)'}}>"thanks!"</span></li>
-          <li><strong>Lee J.</strong> <br/><span style={{fontSize: '12px', color: 'var(--text-secondary)'}}>"sounds good"</span></li>
+          {conversations.length > 0 ? (
+            conversations.map(conv => (
+              <li key={conv.id} className={activeChat?.id === conv.id ? 'active' : ''} onClick={() => setActiveChat(conv)}>
+                <strong>{conv.userName}</strong> <br/>
+                <span style={{fontSize: '12px', color: 'var(--text-secondary)'}}>{conv.isOnline ? '● Online' : conv.lastMessagePreview}</span>
+              </li>
+            ))
+          ) : (
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>No active conversations.</p>
+          )}
         </ul>
       </aside>
 
-      {/* DM Chat Area */}
       <main className="group-chat-area">
-        <header className="chat-header">
-          <div>
-            <h2 style={{ display: 'inline-block', marginRight: '12px' }}>Sam Lee</h2>
-            <span style={{ fontSize: '12px', border: '1px solid var(--border-color)', padding: '2px 8px', borderRadius: '12px' }}>Online</span>
-          </div>
-        </header>
-        
-        <div className="chat-history">
-          <div className="chat-bubble"><strong>Sam:</strong> hey, ready for the demo?</div>
-          <div className="chat-bubble own"><strong>Alex:</strong> yes - pushing now</div>
-          <div className="chat-bubble own" style={{ fontStyle: 'italic', color: 'var(--text-secondary)' }}>[image attachment] build_preview.png (edited)</div>
-          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center', marginTop: 'auto' }}>Hover a bubble to reveal Edit / Delete (own messages only).</p>
-        </div>
+        {activeChat ? (
+          <>
+            <header className="chat-header">
+              <div>
+                <h2 style={{ display: 'inline-block', marginRight: '12px' }}>{activeChat.userName}</h2>
+                {activeChat.isOnline && <span style={{ fontSize: '12px', border: '1px solid var(--border-color)', padding: '2px 8px', borderRadius: '12px' }}>Online</span>}
+              </div>
+            </header>
+            
+            <div className="chat-history">
+              {messages.length > 0 ? (
+                messages.map(msg => (
+                  <div key={msg.id} className={`chat-bubble ${msg.isOwn ? 'own' : ''}`}>
+                    <strong>{msg.author}:</strong> {msg.content}
+                    {msg.isEdited && <span style={{ fontSize: '10px', fontStyle: 'italic', marginLeft: '4px' }}>(edited)</span>}
+                  </div>
+                ))
+              ) : (
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center', marginTop: 'auto' }}>Start the conversation.</p>
+              )}
+            </div>
 
-        <form className="chat-compose" onSubmit={(e) => e.preventDefault()}>
-          <button type="button">+ Attach</button>
-          <button type="button">Schedule</button>
-          <input type="text" placeholder="Type a message..." />
-          <button type="submit">Send</button>
-        </form>
+            <form className="chat-compose" onSubmit={handleSendMessage}>
+              <button type="button">+ Attach</button>
+              <button type="button">Schedule</button>
+              <input type="text" placeholder="Type a message..." value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
+              <button type="submit">Send</button>
+            </form>
+          </>
+        ) : (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+            Select a conversation to start messaging.
+          </div>
+        )}
       </main>
     </div>
   );

@@ -1,11 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 const Login = () => {
   const navigate = useNavigate();
+  const [credentials, setCredentials] = useState({ identifier: '', password: '', rememberMe: false });
+  const [error, setError] = useState('');
+
   const handleLogin = (e) => {
     e.preventDefault(); 
-    navigate('/dashboard'); // Changed from '/groups'
+    // API logic will go here
+    navigate('/dashboard');
   };
 
   return (
@@ -18,14 +22,28 @@ const Login = () => {
         <form className="login-form" onSubmit={handleLogin}>
           <div className="form-group">
             <label>Email or Username</label>
-            <input type="text" placeholder="example@email.com" />
+            <input 
+              type="text" 
+              value={credentials.identifier} 
+              onChange={(e) => setCredentials({...credentials, identifier: e.target.value})} 
+            />
           </div>
           <div className="form-group">
             <label>Password</label>
-            <input type="password" placeholder="********" />
+            <input 
+              type="password" 
+              value={credentials.password} 
+              onChange={(e) => setCredentials({...credentials, password: e.target.value})} 
+            />
           </div>
           <div className="form-actions">
-            <label><input type="checkbox" /> Remember me</label>
+            <label>
+              <input 
+                type="checkbox" 
+                checked={credentials.rememberMe} 
+                onChange={(e) => setCredentials({...credentials, rememberMe: e.target.checked})} 
+              /> Remember me
+            </label>
             <Link to="/forgot-password">Forgot password?</Link>
           </div>
           <button type="submit">Login</button>
@@ -35,6 +53,8 @@ const Login = () => {
         <div className="form-footer">
           <p>Do not have an account? <Link to="/register"><strong>Create an account</strong></Link></p>
         </div>
+
+        {error && <div className="error-state" style={{ display: 'block' }}>{error}</div>}
       </div>
     </div>
   );
