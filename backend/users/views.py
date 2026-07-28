@@ -5,11 +5,9 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.db.models import Q
-from .models import Message
-from .serializers import MessageSerializer
-
-from .models import Profile, Group, MediaFile
-from .serializers import ProfileSerializer, GroupSerializer, MediaFileSerializer
+from .models import Message, Profile, Group, MediaFile
+from .serializers import MessageSerializer, ProfileSerializer, GroupSerializer, MediaFileSerializer,RegisterSerializer
+from rest_framework.permissions import AllowAny
 
 User = get_user_model()
 
@@ -159,3 +157,9 @@ class MessageDetailView(generics.RetrieveDestroyAPIView):
 
     def get_queryset(self):
         return Message.objects.filter(sender=self.request.user)
+    
+
+class RegisterView(generics.CreateAPIView):
+    queryset = User.objects.all()
+    permission_classes = [AllowAny]
+    serializer_class = RegisterSerializer
