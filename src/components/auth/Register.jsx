@@ -1,62 +1,112 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import api from '../../api'; // مسیر فایل تنظیمات اکسیوس که قبلا ساختیم
 
-const Register = () => {
-  const navigate = useNavigate();
-  const [formData, setFormData] = useState({ fullName: '', username: '', email: '', password: '', confirmPassword: '', agreed: false });
-  const [error, setError] = useState('');
+export default function Register() {
+    const navigate = useNavigate();
+    
+    const [formData, setFormData] = useState({
+        username: '',
+        email: '',
+        password: '',
+        password_confirm: ''
+    });
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
 
-  const handleRegister = (e) => {
-    e.preventDefault();
-    // API logic will go here
-    navigate('/dashboard');
-  };
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
 
-  return (
-    <div className="auth-wrapper">
-      <div className="register-container">
-        <div className="logo-placeholder">LOGO</div>
-        <h1>Create Account</h1>
-        <p>Join the messaging system to chat with users, groups, and channels.</p>
-        
-        <form className="register-form" onSubmit={handleRegister}>
-          <div className="form-group">
-            <label>Full Name</label>
-            <input type="text" value={formData.fullName} onChange={(e) => setFormData({...formData, fullName: e.target.value})} />
-          </div>
-          <div className="form-group">
-            <label>Username</label>
-            <input type="text" value={formData.username} onChange={(e) => setFormData({...formData, username: e.target.value})} />
-          </div>
-          <div className="form-group">
-            <label>Email</label>
-            <input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
-          </div>
-          <div className="form-group">
-            <label>Password</label>
-            <input type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
-          </div>
-          <div className="form-group">
-            <label>Confirm Password</label>
-            <input type="password" value={formData.confirmPassword} onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})} />
-          </div>
-          <div className="form-actions">
-            <label>
-              <input type="checkbox" checked={formData.agreed} onChange={(e) => setFormData({...formData, agreed: e.target.checked})} /> I agree to the rules.
-            </label>
-          </div>
-          <button type="submit">Create Account</button>
-        </form>
-        
-        <div className="form-divider"><span>or</span></div>
-        <div className="form-footer">
-          <p>Already have an account? <Link to="/login"><strong>Login</strong></Link></p>
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+
+        if (formData.password !== formData.password_confirm) {
+            setError('رمز عبور و تکرار آن مطابقت ندارند.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await api.post('register/', formData);
+            navigate('/login'); // بعد از ثبت‌نام موفق، به صفحه لاگین هدایت شود
+        } catch (err) {
+            const errorMsg = err.response?.data?.username?.[0] || 
+                             err.response?.data?.email?.[0] || 
+                             'خطایی در ثبت‌نام رخ داد. لطفا دوباره تلاش کنید.';
+            setError(errorMsg);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
+            <div className="bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md">
+                <h2 className="text-2xl font-bold mb-6 text-center text-blue-500">ساخت حساب جدید</h2>
+                
+                {error && <div className="bg-red-500/20 border border-red-500 text-red-400 p-3 rounded mb-4 text-sm text-center">{error}</div>}
+                
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">نام کاربری</label>
+                        <input
+                            type="text"
+                            name="username"
+                            value={formData.username}
+                            onChange={handleChange}
+                            required
+                            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 transition-colors"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">ایمیل</label>
+                        <input
+                            type="email"
+                            name="email"
+                            value={formData.email}
+                            onChange={handleChange}
+                            required
+                            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 transition-colors"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">رمز عبور</label>
+                        <input
+                            type="password"
+                            name="password"
+                            value={formData.password}
+                            onChange={handleChange}
+                            required
+                            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 transition-colors"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">تکرار رمز عبور</label>
+                        <input
+                            type="password"
+                            name="password_confirm"
+                            value={formData.password_confirm}
+                            onChange={handleChange}
+                            required
+                            className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 transition-colors"
+                        />
+                    </div>
+                    
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 rounded text-white font-semibold transition-colors disabled:opacity-50"
+                    >
+                        {loading ? 'در حال ثبت‌نام...' : 'ثبت‌نام'}
+                    </button>
+                </form>
+
+                <p className="mt-4 text-center text-sm text-gray-400">
+                    از قبل حساب دارید؟ <Link to="/login" className="text-blue-400 hover:underline">وارد شوید</Link>
+                </p>
+            </div>
         </div>
-
-        {error && <div className="error-state" style={{ display: 'block' }}>{error}</div>}
-      </div>
-    </div>
-  );
-};
-
-export default Register;
+    );
+}
