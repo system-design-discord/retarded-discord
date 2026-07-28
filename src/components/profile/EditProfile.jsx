@@ -1,92 +1,80 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 const EditProfile = () => {
-  const navigate = useNavigate();
+  // مدیریت وضعیت (State) برای فرم ویرایش
   const [formData, setFormData] = useState({
-    displayName: '',
-    username: '',
-    status: '',
-    shortTag: '',
-    bio: ''
+    username: "majid_dev",
+    email: "majid@example.com",
+    bio: "علاقه‌مند به توسعه نرم‌افزار و یادگیری تکنولوژی‌های جدید.",
   });
-  const [feedback, setFeedback] = useState('Profile changes are saved after validation.');
 
-  const handleSave = (e) => {
+  // تابع برای مدیریت تغییرات در ورودی‌های متنی
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+  };
+
+  // تابع برای مدیریت کلیک روی دکمه ذخیره
+  const handleSubmit = (e) => {
     e.preventDefault();
-    // API logic to save profile
-    setFeedback('Changes saved successfully.');
+    console.log("داده‌های ارسال شده به سرور:", formData);
+    alert("تغییرات شما ذخیره شد! (این پیام تستی است)");
   };
 
   return (
-    <div className="groups-dashboard" style={{ flexDirection: 'row', padding: 0 }}>
-      <aside className="groups-sidebar" style={{ width: '200px' }}>
-        <h3 style={{ marginBottom: '16px' }}>Navigation</h3>
-        <ul className="group-list">
-          <li onClick={() => navigate('/dashboard')}>Home</li>
-          <li onClick={() => navigate('/dms')}>Direct Messages</li>
-          <li onClick={() => navigate('/groups')}>Groups</li>
-          <li onClick={() => navigate('/channels')}>Channels</li>
-          <li onClick={() => navigate('/search')}>Search</li>
-          <li onClick={() => navigate('/notifications')}>Notifications</li>
-          <li className="active" onClick={() => navigate('/profile')}>Profile</li>
-          <li onClick={() => navigate('/settings/account')}>Settings</li>
-        </ul>
-      </aside>
-
-      <main className="settings-panel" style={{ flex: 1, overflowY: 'auto' }}>
-        <div className="profile-toggle" style={{ borderBottom: 'none', padding: '0 0 24px 0' }}>
-          <button onClick={() => navigate('/profile')}>View Profile</button>
-          <button className="active" onClick={() => navigate('/profile/edit')}>Edit Profile</button>
+    <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto', color: '#fff' }}>
+      <h2 style={{ borderBottom: '1px solid #444', paddingBottom: '10px' }}>
+        ویرایش نمایه (Edit Profile)
+      </h2>
+      
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px', backgroundColor: '#1e1e24', padding: '20px', borderRadius: '8px' }}>
+        
+        {/* بخش آپلود رسانه که جزو وظایف اصلی شماست */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <label htmlFor="avatar" style={{ marginBottom: '5px' }}>تغییر عکس پروفایل (آپلود رسانه)</label>
+          <input type="file" id="avatar" accept="image/*" style={{ color: '#aaa', padding: '5px' }} />
         </div>
 
-        <form onSubmit={handleSave}>
-          <h1>Edit Profile</h1>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>Update your public profile information, avatar, banner, and profile bio.</p>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <label htmlFor="username" style={{ marginBottom: '5px' }}>نام کاربری</label>
+          <input 
+            type="text" 
+            id="username" 
+            name="username" 
+            value={formData.username} 
+            onChange={handleChange} 
+            style={{ padding: '10px', borderRadius: '4px', border: 'none', backgroundColor: '#2a2a35', color: '#fff' }}
+          />
+        </div>
 
-          <div className="settings-section">
-            <h3>Public Identity</h3>
-            <div className="form-group" style={{ marginBottom: '16px' }}>
-              <label>Display Name</label>
-              <input type="text" value={formData.displayName} onChange={e => setFormData({...formData, displayName: e.target.value})} />
-            </div>
-            <div className="form-group" style={{ marginBottom: '16px' }}>
-              <label>Username</label>
-              <input type="text" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} />
-            </div>
-            <div className="form-group">
-              <label>Status</label>
-              <input type="text" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} />
-            </div>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <label htmlFor="email" style={{ marginBottom: '5px' }}>ایمیل</label>
+          <input 
+            type="email" 
+            id="email" 
+            name="email" 
+            value={formData.email} 
+            onChange={handleChange} 
+            style={{ padding: '10px', borderRadius: '4px', border: 'none', backgroundColor: '#2a2a35', color: '#fff' }}
+          />
+        </div>
 
-          <div className="settings-section">
-            <h3>About Me</h3>
-            <textarea 
-              style={{ width: '100%', padding: '12px', border: '1px solid var(--border-color)', borderRadius: '6px', background: 'var(--bg-main)', color: 'var(--text-primary)' }} 
-              rows="4" 
-              value={formData.bio} 
-              onChange={e => setFormData({...formData, bio: e.target.value})}
-            />
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <label htmlFor="bio" style={{ marginBottom: '5px' }}>درباره من (Bio)</label>
+          <textarea 
+            id="bio" 
+            name="bio" 
+            value={formData.bio} 
+            onChange={handleChange} 
+            rows="4"
+            style={{ padding: '10px', borderRadius: '4px', border: 'none', backgroundColor: '#2a2a35', color: '#fff', resize: 'vertical' }}
+          ></textarea>
+        </div>
 
-          <div className="visibility-reminder" style={{ background: 'var(--bg-sidebar)' }}>
-            <div>
-              <h3>Visibility Reminder</h3>
-              <p style={{ color: 'var(--text-secondary)' }}>Only public profile fields are edited here.</p>
-            </div>
-            <button type="button" className="btn-cancel" onClick={() => navigate('/settings/privacy')}>Privacy Safe</button>
-          </div>
-
-          <div className="settings-footer">
-            <div><strong>Feedback State</strong><p style={{ color: 'var(--text-secondary)' }}>{feedback}</p></div>
-            <div className="action-buttons">
-              <button type="button" className="btn-cancel" onClick={() => setFormData({displayName:'', username:'', status:'', shortTag:'', bio:''})}>Cancel</button>
-              <button type="submit" className="btn-save">Save Changes</button>
-            </div>
-          </div>
-        </form>
-      </main>
+        <button type="submit" style={{ marginTop: '10px', padding: '12px 20px', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+          ذخیره تغییرات
+        </button>
+      </form>
     </div>
   );
 };

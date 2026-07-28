@@ -1,82 +1,39 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React from 'react';
 
 const ViewProfile = () => {
-  const navigate = useNavigate();
-  const [profileData, setProfileData] = useState(null);
-
-  // Example API fetch simulator
-  // useEffect(() => { fetchProfile().then(data => setProfileData(data)) }, []);
+  // داده‌های تستی برای نمایش ظاهر پروفایل تا زمانی که به سرور وصل شویم
+  const mockUser = {
+    username: "majid_dev",
+    email: "majid@example.com",
+    bio: "علاقه‌مند به توسعه نرم‌افزار و یادگیری تکنولوژی‌های جدید.",
+    avatar: "https://via.placeholder.com/120"
+  };
 
   return (
-    <div className="groups-dashboard" style={{ flexDirection: 'row', padding: 0 }}>
-      <aside className="groups-sidebar" style={{ width: '200px' }}>
-        <h3 style={{ marginBottom: '16px' }}>Navigation</h3>
-        <ul className="group-list">
-          <li onClick={() => navigate('/dashboard')}>Home</li>
-          <li onClick={() => navigate('/dms')}>Direct Messages</li>
-          <li onClick={() => navigate('/groups')}>Groups</li>
-          <li onClick={() => navigate('/channels')}>Channels</li>
-          <li onClick={() => navigate('/search')}>Search</li>
-          <li onClick={() => navigate('/notifications')}>Notifications</li>
-          <li className="active" onClick={() => navigate('/profile')}>Profile</li>
-          <li onClick={() => navigate('/settings/account')}>Settings</li>
-        </ul>
-      </aside>
-
-      <main className="settings-panel" style={{ flex: 1, overflowY: 'auto' }}>
-        <div className="profile-toggle" style={{ borderBottom: 'none', padding: '0 0 24px 0' }}>
-          <button className="active" onClick={() => navigate('/profile')}>View Profile</button>
-          <button onClick={() => navigate('/profile/edit')}>Edit Profile</button>
-        </div>
+    <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto', color: '#fff' }}>
+      <h2 style={{ borderBottom: '1px solid #444', paddingBottom: '10px' }}>
+        نمایه کاربری (Profile)
+      </h2>
+      
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px', backgroundColor: '#1e1e24', padding: '20px', borderRadius: '8px' }}>
+        <img 
+          src={mockUser.avatar} 
+          alt="User Avatar" 
+          style={{ width: '120px', height: '120px', borderRadius: '50%', marginBottom: '15px' }} 
+        />
         
-        <div>
-          <h1>View Profile</h1>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>View another user's public profile information and start a conversation.</p>
-          
-          {profileData ? (
-            <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
-              <div className="profile-banner">Profile Banner / Cover Area</div>
-              <div className="profile-header">
-                <div className="avatar-placeholder" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>AV</div>
-                <div className="user-titles">
-                  <h2>{profileData.displayName}</h2>
-                  <span style={{ color: 'var(--text-secondary)' }}>@{profileData.username}</span>
-                </div>
-                <div className="profile-actions">
-                  <button type="button">Message</button>
-                  <button type="button">Add Friend</button>
-                </div>
-              </div>
-              
-              <div style={{ padding: '24px' }}>
-                <h3>About Me</h3>
-                <p style={{ color: 'var(--text-secondary)' }}>{profileData.bio}</p>
-              </div>
-              
-              <div className="profile-details-grid">
-                <div>
-                  <h3>Profile Details</h3>
-                  <p><strong>Display Name:</strong> {profileData.displayName}</p>
-                  <p><strong>Status:</strong> {profileData.status}</p>
-                </div>
-                <div>
-                  <h3>Mutual Context</h3>
-                  <div className="badges" style={{ marginTop: '8px' }}>
-                    {profileData.mutualContext?.map(context => (
-                      <span key={context}>{context}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-             <div style={{ textAlign: 'center', padding: '40px', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-                <p style={{ color: 'var(--text-secondary)' }}>No profile data loaded.</p>
-             </div>
-          )}
+        <h3>{mockUser.username}</h3>
+        <p style={{ color: '#aaa', marginBottom: '20px' }}>{mockUser.email}</p>
+        
+        <div style={{ width: '100%', textAlign: 'left', backgroundColor: '#2a2a35', padding: '15px', borderRadius: '6px' }}>
+          <strong>درباره من:</strong>
+          <p style={{ marginTop: '10px' }}>{mockUser.bio}</p>
         </div>
-      </main>
+
+        <button style={{ marginTop: '20px', padding: '10px 20px', backgroundColor: '#5865F2', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', width: '100%' }}>
+          ویرایش نمایه
+        </button>
+      </div>
     </div>
   );
 };
