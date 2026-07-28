@@ -31,3 +31,13 @@ class Group(models.Model):
         return self.name
     
     
+
+class MediaFile(models.Model):
+#Media 
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='uploaded_files', verbose_name="آپلودکننده")
+    file = models.FileField(upload_to='uploads/%Y/%m/%d/', verbose_name="فایل")
+    file_type = models.CharField(max_length=50, blank=True, null=True, verbose_name="نوع فایل")
+    uploaded_at = models.DateTimeField(auto_now_add=True, verbose_name="زمان آپلود")
+
+    def __str__(self):
+        return f"{self.user.username} - {self.file.name}"
