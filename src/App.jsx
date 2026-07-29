@@ -4,9 +4,9 @@ import { AuthContext } from './context/AuthContext';
 
 import Login from './components/auth/Login';
 import Register from './components/auth/Register';
-import EditProfile from './components/profile/EditProfile'; // همان کامپوننتی که در تصویر اول روی آن کار می‌کردید
+import EditProfile from './components/profile/EditProfile';
+import Chat from './components/chat/Chat'; 
 
-// یک کامپوننت کمکی برای محافظت از مسیرهایی که نیاز به لاگین دارند
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
   
@@ -19,11 +19,9 @@ function App() {
   return (
     <Router>
       <Routes>
-        {/* مسیرهای عمومی (بدون نیاز به لاگین) */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        {/* مسیرهای محافظت‌شده (نیاز به لاگین) */}
         <Route 
           path="/profile" 
           element={
@@ -32,8 +30,17 @@ function App() {
             </PrivateRoute>
           } 
         />
+        
+        {/* مسیر جدید برای چت روم (نیاز به لاگین دارد) */}
+        <Route 
+          path="/chat/:groupId" 
+          element={
+            <PrivateRoute>
+              <Chat />
+            </PrivateRoute>
+          } 
+        />
 
-        {/* مسیر پیش‌فرض: هدایت به پروفایل (که در صورت نداشتن لاگین، کاربر را به لاگین می‌فرستد) */}
         <Route path="*" element={<Navigate to="/profile" />} />
       </Routes>
     </Router>
