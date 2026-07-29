@@ -4,7 +4,6 @@ from .models import Profile, Group, MediaFile, Message
 from django.contrib.auth.password_validation import validate_password
 
 
-
 User = get_user_model()
 
 
@@ -111,3 +110,23 @@ class RegisterSerializer(serializers.ModelSerializer):
             password=validated_data['password']
         )
         return user
+    
+
+
+class MediaFileSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+    
+    class Meta:
+        model = MediaFile
+        fields = ['id', 'user', 'file', 'file_type', 'file_size', 'uploaded_at']
+        read_only_fields = ['id', 'user', 'file_type', 'file_size', 'uploaded_at']
+
+    def validate_file(self, value):
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.mp4', '.mp3', '.pdf', '.zip']
+        import os
+        ext = os.path.splitext(value.name)[1].lower()
+        
+        if ext not in allowed_extensions:
+            raise serializers.ValidationError(f"فرمت فایل مجاز نیست. فرمت‌های مجاز: {', '.join(allowed_extensions)}")
+            
+        return value
