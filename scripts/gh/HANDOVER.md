@@ -13,7 +13,10 @@ the state of *this* setup and the specific actions still outstanding.
 | **Labels** | 27 created — `epic:*` ×11, `type:*` ×5, `prio:*` ×3, `pts:*` ×6, plus `blocker` and `blocked`. |
 | **Merge settings** | Squash-only merges; merge commits and rebase merges disabled; head branches auto-delete on merge; issues and projects enabled. |
 | **Stale branch** | `feature/my-first-task` deleted from the remote. |
-| **Issues** | Every card in `backlog.tsv` created as an issue titled `ID — Title`, carrying a blocker banner where applicable, the user stories it serves, the notes, the acceptance criteria, the files to touch, the branch name, and the Definition of Done checklist. Labelled, milestoned, and assigned. |
+| **Issues** | All **71 cards** in `backlog.tsv` created as issues titled `ID — Title`, each carrying a blocker banner where applicable, the user stories it serves, the notes, the acceptance criteria, the files to touch, the branch name, and the Definition of Done checklist. 27 to `Sprint 1`, 44 to `Sprint 2`. |
+| **Assignments** | Arman 18 · Arvin 12 · Majid 12 · Ali 11 · Amirhossein 10. **Amir's 8 cards are unassigned** — see step 2. |
+| **Blockers** | 13 cards labelled `blocker`, each naming what it blocks: `F-01` `P-06` `P-01` `P-03` `P-04` `R-01` `R-04` `G-02` `P-02` `C-01` `M-01` `F-00` `N-01`. |
+| **Tooling committed** | Branch `chore/g-01-repo-setup` pushed with `.github/`, `scripts/gh/`, `execution-plan.md` and `sprint-calendar.md`; **PR #72** open against `main`, closing the `G-01` issue. It is waiting on a teammate's review — do not self-merge it. |
 | **Branch protection** | **None, deliberately.** `main` takes direct pushes and anyone can merge. See `execution-plan.md` Part 0, deviation 3. |
 
 ---
@@ -37,13 +40,15 @@ gh repo edit system-design-discord/retarded-discord \
 ### 2. Add the two missing people
 
 Only `iMajid27`, `amirhoseinshayan`, `arvintaheri` and `OstadTahmasb` are
-collaborators today. Ali has committed but is not one, and Amir has no known
-GitHub login at all.
+collaborators. `ali-mansourian` accepted assignment anyway (he is a contributor),
+so his 11 cards are assigned — but add him properly so he can push:
 
 > `github.com/system-design-discord/retarded-discord` → **Settings** →
 > **Collaborators and teams** → **Add people** → `ali-mansourian`, **Write**.
 
-Then get **Amir's** GitHub username, put it in `config.sh`:
+**Amir has no known GitHub login at all**, so his eight cards — `F-00`, `F-02`,
+`F-03`, `F-04`, `F-05`, `F-07`, `F-08`, `U-09` — were seeded unassigned. Get his
+username, put it in `config.sh`:
 
 ```bash
 $EDITOR scripts/gh/config.sh        # [Amir]="his-login"
@@ -56,9 +61,13 @@ pick up an assignee:
 cd scripts/gh && ./03-seed.sh
 ```
 
-> **Why it matters:** GitHub silently ignores an `--assignee` who lacks push
-> access. Any card whose owner was not a collaborator at seed time is sitting
-> unassigned right now — filter the issue list by `no:assignee` to see which.
+> **Why it matters:** brief Rule 6 grades participation, and the board is the
+> evidence. Eight unassigned cards read as one person doing nothing.
+>
+> ```bash
+> gh issue list --repo system-design-discord/retarded-discord \
+>   --search 'no:assignee' --limit 100
+> ```
 
 ### 3. Create the project board — **blocking, brief Rule 10**
 
@@ -86,7 +95,15 @@ cd scripts/gh && ./02-project.sh
 > Then `...` → **Settings** → **Visibility: Public**, and **Manage access** →
 > link the `retarded-discord` repository.
 
-Either way, then add the three fields (`02-project.sh` does these for you):
+**(c) Fallback — create it under your own account.** If org permissions cannot
+be sorted quickly, a personal Projects v2 board linked to the repository works
+identically for grading: it appears on the repo's **Projects** tab and can be
+made public. `gh project create --owner @me --title "Discord Clone — Scrum Board"`,
+then set `ORG` handling aside and link it by hand. The cost is that the board is
+owned by one person rather than the team, and Projects v2 boards cannot be
+re-parented later without re-creating them — so try (a) first.
+
+Whichever route, then add the three fields (`02-project.sh` does these for you):
 
 | Field | Type | Options |
 |---|---|---|
