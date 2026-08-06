@@ -190,16 +190,14 @@ honest.
 
 ### 10. Commit and push the tooling
 
-`.github/`, `scripts/`, `execution-plan.md` and `sprint-calendar.md` are still
-untracked. `CLAUDE.md` is now in `.gitignore` and must stay out of the public repo.
+Done — branch `chore/g-01-repo-setup` is pushed and **PR #72** is open. It needs
+one teammate's approval before it lands. Do not self-merge it: nothing on GitHub
+stops you, and that is exactly the rule `execution-plan.md` Part 6 asks us to
+keep anyway.
 
-```bash
-git checkout -b chore/g-01-repo-setup
-git add .github scripts execution-plan.md sprint-calendar.md .gitignore
-git commit -m "chore(repo): add issue and PR templates, board tooling, and the current plan"
-git push -u origin chore/g-01-repo-setup
-gh pr create --fill
-```
+Any local editor or tooling scratch files you do not want in a public repository
+belong in `.git/info/exclude`, not `.gitignore` — the exclude file is local-only
+and never pushed.
 
 ### 11. Confirm with the TA — *Arvin, card `B-02`*
 
