@@ -1,0 +1,41 @@
+name: Spike
+description: A time-boxed investigation that produces knowledge, not shippable code
+title: "SPIKE — "
+labels: ["type:spike"]
+body:
+  - type: input
+    id: card-id
+    attributes:
+      label: Card ID
+      placeholder: "SC-01"
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: Question being answered
+      description: One sentence. If it cannot be stated as a question, this is not a spike.
+    validations:
+      required: true
+  - type: input
+    id: timebox
+    attributes:
+      label: Time-box
+      placeholder: "4 hours"
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Expected output
+      description: What we will be able to decide or write once this is finished.
+      value: |
+        - [ ] Findings written up in the issue
+        - [ ] Follow-up cards created
+    validations:
+      required: true
+  - type: input
+    id: branch
+    attributes:
+      label: Branch (if any)
+      placeholder: "spike/sc-01-celery"

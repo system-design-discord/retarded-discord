@@ -1,0 +1,48 @@
+name: User Story
+description: A user-facing capability
+title: "US-x.y — "
+labels: ["type:story"]
+body:
+  - type: input
+    id: story-id
+    attributes:
+      label: Story ID
+      placeholder: "US-4.1"
+    validations:
+      required: true
+  - type: textarea
+    id: story
+    attributes:
+      label: Story
+      value: "As a ..., I want ..., so that ..."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Files to create or edit
+  - type: input
+    id: branch
+    attributes:
+      label: Branch
+      placeholder: "feat/us-4-1-create-channel"
+  - type: checkboxes
+    id: dor
+    attributes:
+      label: Definition of Ready
+      options:
+        - label: Written as a user story
+        - label: Has acceptance criteria
+        - label: Small enough for one Sprint
+        - label: Estimated
+        - label: No unresolved stakeholder question

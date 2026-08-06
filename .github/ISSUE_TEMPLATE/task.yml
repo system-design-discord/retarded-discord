@@ -1,0 +1,46 @@
+name: Task
+description: Technical work that is not itself a user-facing story
+title: "X-00 — "
+labels: ["type:task"]
+body:
+  - type: input
+    id: card-id
+    attributes:
+      label: Card ID
+      placeholder: "P-04"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What needs doing
+      description: The technical change, and why it is needed.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Files to create or edit
+  - type: input
+    id: branch
+    attributes:
+      label: Branch
+      placeholder: "refactor/p-04-split-modules"
+  - type: checkboxes
+    id: dor
+    attributes:
+      label: Definition of Ready
+      options:
+        - label: Has acceptance criteria
+        - label: Small enough for one Sprint
+        - label: Estimated
+        - label: No unresolved stakeholder question

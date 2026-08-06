@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question for the stakeholder (TA)
+    url: https://github.com/system-design-discord/retarded-discord/discussions
+    about: Send it to Arvin instead — he is the single channel to the TA and batches questions.

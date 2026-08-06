@@ -1,0 +1,46 @@
+name: Bug
+description: Something built does not behave as its acceptance criteria say
+title: "BUG — "
+labels: ["type:bug"]
+body:
+  - type: input
+    id: story-ref
+    attributes:
+      label: Story or card it breaks
+      placeholder: "US-4.3 / C-04"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected versus actual
+      value: |
+        **Expected:**
+        **Actual:**
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Breaks a core flow
+        - Breaks a non-core flow
+        - Cosmetic
+    validations:
+      required: true
+  - type: input
+    id: branch
+    attributes:
+      label: Branch
+      placeholder: "fix/u-05-api-client"
