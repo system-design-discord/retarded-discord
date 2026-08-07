@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import api from '../../api'; // مسیر فایل تنظیمات اکسیوس که قبلا ساختیم
+import api from "../../services/api";
 
 export default function Register() {
     const navigate = useNavigate();
@@ -29,7 +29,7 @@ export default function Register() {
 
         setLoading(true);
         try {
-            await api.post('register/', formData);
+            await api.post('auth/register/', formData);
             navigate('/login'); // بعد از ثبت‌نام موفق، به صفحه لاگین هدایت شود
         } catch (err) {
             const errorMsg = err.response?.data?.username?.[0] || 

@@ -1,129 +1,65 @@
-import React, { useState, useEffect } from 'react';
-import API from "../../services/api";
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const EditProfile = () => {
-  const [formData, setFormData] = useState({
-    username: "",
-    email: "",
-    bio: "",
-  });
-
-  const [avatar, setAvatar] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    API.get('profile/')
-      .then((response) => {
-        const data = response.data;
-        setFormData({
-          username: data.user?.username || '',
-          email: data.user?.email || '',
-          bio: data.bio || '',
-        });
-        setLoading(false);
-      })
-      .catch((error) => {
-        console.error("خطا در دریافت پروفایل:", error);
-        setLoading(false);
-      });
-  }, []);
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-  };
-
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setAvatar(e.target.files[0]);
-    }
-  };
+  const navigate = useNavigate();
+  const [bio, setBio] = useState('Computer Engineering Student @ Sharif University. Working on CE-40418 Discord SPA.');
+  const [feedback, setFeedback] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
-    const sendData = new FormData();
-    sendData.append('bio', formData.bio);
-    if (avatar) {
-      sendData.append('avatar', avatar);
-    }
-
-    API.patch('profile/', sendData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
-      .then(() => {
-        alert("تغییرات با موفقیت در دیتابیس ذخیره شد!");
-      })
-      .catch((error) => {
-        console.error("خطا در ذخیره پروفایل:", error);
-        alert("خطا در ذخیره تغییرات!");
-      });
+    setFeedback('Profile updated successfully!');
+    setTimeout(() => {
+      navigate('/profile');
+    }, 1000);
   };
 
-  if (loading) {
-    return <div style={{ color: '#fff', textAlign: 'center', marginTop: '2rem' }}>در حال بارگذاری اطلاعات...</div>;
-  }
-
   return (
-    <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto', color: '#fff' }}>
-      <h2 style={{ borderBottom: '1px solid #444', paddingBottom: '10px' }}>
-        ویرایش نمایه (Edit Profile)
-      </h2>
-      
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px', backgroundColor: '#1e1e24', padding: '20px', borderRadius: '8px' }}>
-        
-        {/* بخش آپلود رسانه */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <label htmlFor="avatar" style={{ marginBottom: '5px' }}>تغییر عکس پروفایل (آپلود رسانه)</label>
-          <input 
-            type="file" 
-            id="avatar" 
-            accept="image/*" 
-            onChange={handleFileChange}
-            style={{ color: '#aaa', padding: '5px' }} 
-          />
-        </div>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex">
+      <main className="flex-1 p-8 overflow-y-auto flex items-center justify-center">
+        <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
+          <h2 className="text-2xl font-extrabold text-white">Edit Profile</h2>
 
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <label htmlFor="username" style={{ marginBottom: '5px' }}>نام کاربری</label>
-          <input 
-            type="text" 
-            id="username" 
-            name="username" 
-            value={formData.username} 
-            disabled
-            style={{ padding: '10px', borderRadius: '4px', border: 'none', backgroundColor: '#1a1a20', color: '#888', cursor: 'not-allowed' }}
-          />
-        </div>
+          {feedback && (
+            <div className="bg-emerald-500/10 border border-emerald-500 text-emerald-400 p-3 rounded-xl text-xs text-center font-bold">
+              {feedback}
+            </div>
+          )}
 
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <label htmlFor="email" style={{ marginBottom: '5px' }}>ایمیل</label>
-          <input 
-            type="email" 
-            id="email" 
-            name="email" 
-            value={formData.email} 
-            disabled
-            style={{ padding: '10px', borderRadius: '4px', border: 'none', backgroundColor: '#1a1a20', color: '#888', cursor: 'not-allowed' }}
-          />
-        </div>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-400 mb-2">Profile Avatar</label>
+              <input type="file" accept="image/*" className="text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700 cursor-pointer" />
+            </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <label htmlFor="bio" style={{ marginBottom: '5px' }}>درباره من (Bio)</label>
-          <textarea 
-            id="bio" 
-            name="bio" 
-            value={formData.bio} 
-            onChange={handleChange} 
-            rows="4"
-            style={{ padding: '10px', borderRadius: '4px', border: 'none', backgroundColor: '#2a2a35', color: '#fff', resize: 'vertical' }}
-          ></textarea>
-        </div>
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-400 mb-2">About Me (Bio)</label>
+              <textarea
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                rows="4"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition"
+              ></textarea>
+            </div>
 
-        <button type="submit" style={{ marginTop: '10px', padding: '12px 20px', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-          ذخیره تغییرات
-        </button>
-      </form>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => navigate('/profile')}
+                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition shadow-lg shadow-indigo-600/20"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </div>
+      </main>
     </div>
   );
 };

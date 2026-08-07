@@ -1,88 +1,13 @@
-/* ---------------- Theme Variables ---------------- */
+@import "tailwindcss";
+
 :root {
-  --bg-main: #f3f4f6;
-  --bg-card: #ffffff;
-  --bg-sidebar: #f9fafb;
-  --border-color: #d1d5db;
-  --text-primary: #111111;
-  --text-secondary: #6b7280;
-  --btn-bg: #f9fafb;
-  --btn-border: #d1d5db;
-  --btn-hover: #e5e7eb;
-  --accent: #3b82f6;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
 }
 
-/* Dark Mode Overrides */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-main: #111827;
-    --bg-card: #1f2937;
-    --bg-sidebar: #111827;
-    --border-color: #374151;
-    --text-primary: #f9fafb;
-    --text-secondary: #9ca3af;
-    --btn-bg: #374151;
-    --btn-border: #4b5563;
-    --btn-hover: #4b5563;
-  }
+body {
+  margin: 0;
+  background-color: #020617;
+  color: #f8fafc;
+  direction: ltr;
 }
-
-/* Force Dark Mode Class (if you want a manual toggle later) */
-.dark-mode {
-  --bg-main: #111827;
-  --bg-card: #1f2937;
-  --bg-sidebar: #111827;
-  --border-color: #374151;
-  --text-primary: #f9fafb;
-  --text-secondary: #9ca3af;
-  --btn-bg: #374151;
-  --btn-border: #4b5563;
-  --btn-hover: #4b5563;
-}
-
-/* ---------------- Reset & Base ---------------- */
-body { 
-  background-color: var(--bg-main); 
-  font-family: system-ui, sans-serif; 
-  margin: 0; 
-  color: var(--text-primary); 
-}
-h1, h2, h3, p { margin: 0 0 8px 0; }
-ul { list-style: none; padding: 0; margin: 0; }
-a { text-decoration: none; color: var(--accent); }
-a:hover { text-decoration: underline; }
-
-/* ---------------- Layouts & Dashboards ---------------- */
-.groups-dashboard, .notifications-container, .view-profile-container, .edit-profile-container, .settings-panel {
-  max-width: 1000px; margin: 40px auto; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-}
-
-/* Sidebar & Structure */
-.groups-header, .notifications-header { padding: 24px; border-bottom: 1px solid var(--border-color); background: var(--bg-card); }
-.groups-layout { display: flex; flex: 1; min-height: 600px; }
-.groups-sidebar { width: 250px; border-right: 1px solid var(--border-color); background: var(--bg-sidebar); padding: 24px; }
-.group-list li { padding: 10px; margin-bottom: 8px; border-radius: 6px; cursor: pointer; color: var(--text-primary); }
-.group-list li:hover { background: var(--btn-hover); }
-.group-list li.active { background: var(--btn-bg); font-weight: bold; border: 1px solid var(--border-color); }
-
-/* Chat Area */
-.group-chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-card); }
-.chat-header { padding: 24px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
-.chat-history { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px;}
-.chat-bubble { max-width: 70%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-main); }
-.chat-bubble.own { align-self: flex-end; background: var(--bg-sidebar); }
-.chat-compose { padding: 24px; border-top: 1px solid var(--border-color); display: flex; gap: 12px; align-items: center; }
-.chat-compose input { flex: 1; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-main); color: var(--text-primary); }
-
-/* Buttons & Inputs */
-button { background: var(--btn-bg); border: 1px solid var(--btn-border); color: var(--text-primary); padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; }
-button:hover { background: var(--btn-hover); }
-input[type="text"], input[type="password"], input[type="email"], textarea { background: var(--bg-main); border: 1px solid var(--border-color); color: var(--text-primary); }
-
-/* Topics (Channels) */
-.topics-row { display: flex; gap: 8px; margin-top: 8px; }
-.topic-badge { padding: 4px 12px; border: 1px solid var(--border-color); border-radius: 16px; font-size: 12px; background: var(--bg-main); cursor: pointer; }
-
-/* Search Results */
-.search-result { border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 12px; background: var(--bg-main); cursor: pointer; }
-.search-result:hover { background: var(--btn-hover); }
