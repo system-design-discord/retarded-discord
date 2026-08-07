@@ -14,62 +14,61 @@ export default function Login() {
     setError('');
     try {
       await login(username, password);
-      // انتقال مستقیم به داشبورد اصلی
       navigate('/dashboard');
     } catch (err) {
-      setError('نام کاربری یا رمز عبور اشتباه است.');
+      setError('Invalid username or password.');
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        <h2 className="text-3xl font-extrabold text-white text-center mb-2">ورود به حساب کاربری</h2>
-        <p className="text-slate-400 text-sm text-center mb-6">خوش آمدید! خوشحالیم دوباره شما را می‌بینیم.</p>
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        <h2 className="text-3xl font-extrabold text-white text-center mb-2">Welcome Back!</h2>
+        <p className="text-slate-400 text-sm text-center mb-6">We're so excited to see you again!</p>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500 text-red-400 p-3 rounded-lg text-sm text-center mb-4">
+          <div className="bg-red-500/10 border border-red-500/40 text-red-400 p-3 rounded-xl text-xs text-center font-semibold mb-4">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-slate-300 text-xs font-bold uppercase mb-2">نام کاربری</label>
+            <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Username</label>
             <input
               type="text"
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-indigo-500 transition duration-200"
-              placeholder="نام کاربری خود را وارد کنید"
+              className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition duration-200 text-sm"
+              placeholder="Enter your username"
             />
           </div>
 
           <div>
-            <label className="block text-slate-300 text-xs font-bold uppercase mb-2">رمز عبور</label>
+            <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Password</label>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-indigo-500 transition duration-200"
+              className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition duration-200 text-sm"
               placeholder="••••••••"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg shadow-lg hover:shadow-indigo-500/30 transition duration-200 cursor-pointer"
+            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-600/20 transition duration-200 cursor-pointer"
           >
-            ورود
+            Log In
           </button>
         </form>
 
         <div className="mt-6 text-center text-sm text-slate-400">
-          حساب کاربری ندارید؟{' '}
+          Need an account?{' '}
           <Link to="/register" className="text-indigo-400 hover:underline font-semibold">
-            ثبت‌نام کنید
+            Register
           </Link>
         </div>
       </div>
