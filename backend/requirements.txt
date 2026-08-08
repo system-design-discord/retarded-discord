@@ -1,0 +1,18 @@
+# Direct dependencies, pinned so every machine and the container agree.
+# Transitive dependencies are left to the resolver.
+
+Django==6.0.8
+djangorestframework==3.18.0
+djangorestframework-simplejwt==5.5.1
+
+# ASGI: the /ws gateway needs Channels, and daphne is the ASGI server.
+channels[daphne]==4.3.2
+
+# PostgreSQL driver. US-9.1 full-text search needs Postgres, not SQLite.
+psycopg[binary]==3.3.4
+
+# ImageField on Profile and Group avatars.
+pillow==12.3.0
+
+# Browser calls from the Vite dev server; production is single-origin behind nginx.
+django-cors-headers==4.9.0
