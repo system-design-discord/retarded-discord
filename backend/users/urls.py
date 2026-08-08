@@ -13,7 +13,8 @@ from .views import (
     MediaDetailView,
     MessageListCreateView,
     MessageDetailView,
-    RegisterView
+    RegisterView,
+    MeView
 )
 
 
@@ -34,10 +35,10 @@ urlpatterns = [
     path('messages/', MessageListCreateView.as_view(), name='message-list-create'),
     path('messages/<int:pk>/', MessageDetailView.as_view(), name='message-detail'),
 
-    # Login 
-    path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    
-
-    path('register/', RegisterView.as_view(), name='register'),
+    # Auth — core/urls.py already mounts this module under api/, so these must
+    # not repeat the prefix or they land at /api/api/auth/…
+    path('auth/register/', RegisterView.as_view(), name='register'),
+    path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/me/', MeView.as_view(), name='auth-me'),
 ]

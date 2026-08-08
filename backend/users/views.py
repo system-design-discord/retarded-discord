@@ -6,10 +6,19 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from .models import Message, Profile, Group, MediaFile
-from .serializers import MessageSerializer, ProfileSerializer, GroupSerializer, MediaFileSerializer,RegisterSerializer
+from .serializers import MessageSerializer, ProfileSerializer, GroupSerializer, MediaFileSerializer,RegisterSerializer, UserSerializer
 from rest_framework.permissions import AllowAny
 
 User = get_user_model()
+
+
+class MeView(generics.RetrieveAPIView):
+    """The signed-in user, so the SPA can resolve its own id after login."""
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
 
 
 # PROFILE & SETTINGS VIEWS

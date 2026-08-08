@@ -1,7 +1,11 @@
 import axios from 'axios';
 
+// Same-origin by default: nginx proxies /api to the backend in the container
+// stack, and the Vite dev server proxies it in development.
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/';
+
 const api = axios.create({
-    baseURL: 'http://localhost:8000/api/', 
+    baseURL: API_BASE_URL,
 });
 
 // اضافه کردن توکن به هدر همه درخواست‌ها
@@ -28,7 +32,7 @@ api.interceptors.response.use(
             
             if (refreshToken) {
                 try {
-                    const res = await axios.post('http://localhost:8000/api/auth/refresh/', {
+                    const res = await axios.post(`${API_BASE_URL}auth/refresh/`, {
                         refresh: refreshToken
                     });
                     
