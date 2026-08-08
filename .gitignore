@@ -26,8 +26,15 @@ dist-ssr
 
 # Backend (Django)
 venv/
+.venv/
 __pycache__/
 *.pyc
 db.sqlite3
 media/
 avatars/
+staticfiles/
+
+# Environment
+.env
+.env.*
+!.env.example
