@@ -96,7 +96,7 @@ class GroupAddRemoveMemberView(APIView):
         target_user = get_object_or_404(User, pk=user_id)
 
         if action == 'add':
-            
+
             target_profile, _ = Profile.objects.get_or_create(user=target_user)
             if not target_profile.allow_invites:
                 return Response(
@@ -130,7 +130,13 @@ class MediaDetailView(generics.RetrieveDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return MediaFile.objects.filter(user=self.request.user)
+        user = self.request.user
+        return MediaFile.objects.filter(
+            Q(user=user) | 
+            Q(message__sender=user) | 
+            Q(message__recipient=user) | 
+            Q(message__group__members=user)
+        ).distinct()
     
 
 
