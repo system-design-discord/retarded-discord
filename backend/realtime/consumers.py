@@ -2,7 +2,8 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
-from .models import Message, Group
+from groups_app.models import Group
+from messaging.models import Message
 
 User = get_user_model()
 

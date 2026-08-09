@@ -51,7 +51,13 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'channels',
     'corsheaders',
-    'users',
+
+    # Domain modules — architecture.tex §5.
+    'accounts',
+    'messaging',
+    'groups_app',
+    'media_app',
+    'realtime',
 ]
 
 MIDDLEWARE = [

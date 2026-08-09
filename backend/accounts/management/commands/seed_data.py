@@ -1,8 +1,11 @@
-from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
-from users.models import Profile, Group
+from django.core.management.base import BaseCommand
+
+from accounts.models import Profile
+from groups_app.models import Group
 
 User = get_user_model()
+
 
 class Command(BaseCommand):
     help = 'تزریق داده‌های اولیه برای تست سیستم'
@@ -23,7 +26,7 @@ class Command(BaseCommand):
                 user.set_password('testpass123')
                 user.save()
             created_users.append(user)
-            
+
             Profile.objects.get_or_create(user=user, defaults={'bio': u_data['bio']})
 
         admin_user = created_users[0]
