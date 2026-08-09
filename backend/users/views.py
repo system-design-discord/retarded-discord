@@ -22,6 +22,14 @@ class ProfileDetailView(generics.RetrieveUpdateAPIView):
         profile, _ = Profile.objects.get_or_create(user=self.request.user)
         return profile
 
+class ProfileRetrieveAPIView(generics.RetrieveAPIView):
+    serializer_class = ProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'user__id'
+    lookup_url_kwarg = 'user_id'
+
+    def get_queryset(self):
+        return Profile.objects.all()
 
 class PrivacySettingsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -88,13 +96,16 @@ class GroupAddRemoveMemberView(APIView):
         target_user = get_object_or_404(User, pk=user_id)
 
         if action == 'add':
+            
+            target_profile, _ = Profile.objects.get_or_create(user=target_user)
+            if not target_profile.allow_invites:
+                return Response(
+                    {"error": f"کاربر {target_user.username} اجازه اضافه شدن به گروه‌ها را بسته است."}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+                
             group.members.add(target_user)
             return Response({"message": f"کاربر {target_user.username} به گروه اضافه شد."}, status=status.HTTP_200_OK)
-        elif action == 'remove':
-            if target_user == group.admin:
-                return Response({"error": "امکان حذف ادمین اصلی وجود ندارد."}, status=status.HTTP_400_BAD_REQUEST)
-            group.members.remove(target_user)
-            return Response({"message": f"کاربر {target_user.username} از گروه حذف شد."}, status=status.HTTP_200_OK)
 
 
 # MEDIA FILE VIEWS

@@ -13,13 +13,15 @@ from .views import (
     MediaDetailView,
     MessageListCreateView,
     MessageDetailView,
-    RegisterView
+    RegisterView,
+    ProfileRetrieveAPIView
 )
 
 
 urlpatterns = [
     # Profile , Settings
     path('profile/', ProfileDetailView.as_view(), name='profile-detail'),
+    path('profile/<int:user_id>/', ProfileRetrieveAPIView.as_view(), name='profile-other'),
     path('settings/privacy/', PrivacySettingsView.as_view(), name='privacy-settings'),
     
     # Groups
