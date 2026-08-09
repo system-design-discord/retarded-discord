@@ -8,9 +8,13 @@ from django.urls import include, path
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('accounts.urls')),
-    path('api/', include('groups_app.urls')),
-    path('api/', include('media_app.urls')),
     path('api/', include('messaging.urls')),
+    path('api/', include('groups_app.urls')),
+    path('api/', include('channels_app.urls')),
+    path('api/', include('roles.urls')),
+    path('api/', include('media_app.urls')),
+    path('api/', include('notifications.urls')),
+    path('api/', include('scheduling.urls')),
 ]
 
 if settings.DEBUG:

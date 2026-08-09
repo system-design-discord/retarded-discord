@@ -56,8 +56,12 @@ INSTALLED_APPS = [
     'accounts',
     'messaging',
     'groups_app',
+    'channels_app',
+    'roles',
     'media_app',
+    'notifications',
     'realtime',
+    'scheduling',
 ]
 
 MIDDLEWARE = [
