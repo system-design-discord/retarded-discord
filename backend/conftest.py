@@ -10,7 +10,20 @@ import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 
+from common import events
+
 User = get_user_model()
+
+
+@pytest.fixture(autouse=True)
+def isolated_event_subscribers():
+    """common.events keeps its subscriber registry in a module global, so a
+    test that subscribes would otherwise still be listening during the next
+    one. Snapshot it and put it back."""
+    snapshot = {event: list(handlers) for event, handlers in events._subscribers.items()}
+    yield
+    events._subscribers.clear()
+    events._subscribers.update(snapshot)
 
 
 @pytest.fixture

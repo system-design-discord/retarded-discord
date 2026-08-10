@@ -2,6 +2,7 @@
 
 from rest_framework import serializers
 
+from channels_app.models import ChannelMember
 from roles.models import PERMISSION_FIELDS, Role
 from roles.services import permissions_for
 
@@ -51,3 +52,43 @@ class RoleSerializer(serializers.ModelSerializer):
             })
 
         return attrs
+
+
+class MemberRoleSerializer(serializers.ModelSerializer):
+    """Assigning a role to a member (R-03, US-4.9).
+
+    `role` is nullable on purpose: sending null clears the member's role rather
+    than removing them from the channel.
+    """
+
+    class Meta:
+        model = ChannelMember
+        fields = ['id', 'user', 'channel', 'role', 'joined_at']
+        read_only_fields = ['id', 'user', 'channel', 'joined_at']
+
+    def validate_role(self, value):
+        if value is None:
+            return None
+
+        channel = self.context['channel']
+        if value.channel_id != channel.pk:
+            raise serializers.ValidationError("این نقش متعلق به کانال دیگری است.")
+
+        # US-8.2 again, from the other direction: assigning a role that grants
+        # more than the actor holds is the same escalation as creating one.
+        held = permissions_for(self.context['request'].user, channel)
+        overreach = [field for field in PERMISSION_FIELDS if getattr(value, field) and not held[field]]
+        if overreach:
+            raise serializers.ValidationError(
+                "این نقش دسترسی‌هایی دارد که خود شما ندارید: " + ", ".join(overreach)
+            )
+
+        return value
+
+
+class MyPermissionsSerializer(serializers.Serializer):
+    """US-8.3 — what the caller may do here, and under what role name."""
+
+    channel = serializers.IntegerField(read_only=True)
+    role = serializers.CharField(read_only=True, allow_null=True)
+    permissions = serializers.DictField(child=serializers.BooleanField(), read_only=True)
