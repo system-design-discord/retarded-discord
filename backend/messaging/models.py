@@ -6,8 +6,12 @@ User = get_user_model()
 
 class Message(models.Model):
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
-    recipient = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='received_messages')
-    group = models.ForeignKey('groups_app.Group', on_delete=models.CASCADE, null=True, blank=True, related_name='messages')
+    recipient = models.ForeignKey(
+        User, on_delete=models.CASCADE, null=True, blank=True, related_name='received_messages'
+    )
+    group = models.ForeignKey(
+        'groups_app.Group', on_delete=models.CASCADE, null=True, blank=True, related_name='messages'
+    )
 
     text = models.TextField(blank=True, null=True)
     media = models.ForeignKey('media_app.MediaFile', on_delete=models.SET_NULL, null=True, blank=True)

@@ -1,0 +1,17 @@
+# Deliberately small. The point is catching real defects and keeping imports in
+# one order across nine modules, not enforcing a house style two days from a
+# deadline.
+
+line-length = 120
+target-version = "py313"
+
+exclude = ["*/migrations/*"]
+
+[lint]
+# E/W pycodestyle, F pyflakes, I import order, UP pyupgrade, B bugbear.
+select = ["E", "W", "F", "I", "UP", "B"]
+
+[lint.per-file-ignores]
+# Settings legitimately shouts, and asgi.py imports after get_asgi_application().
+"config/settings.py" = ["E501"]
+"config/asgi.py" = ["E402"]
