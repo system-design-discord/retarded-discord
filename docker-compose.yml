@@ -1,0 +1,66 @@
+# One command brings up the whole product: `cp .env.example .env && docker compose up`.
+# Only nginx publishes a port — everything else talks over the internal network.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-discord}
+      POSTGRES_USER: ${POSTGRES_USER:-discord}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-discord}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # The backend waits on this rather than retrying its own connection.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-discord} -d ${POSTGRES_DB:-discord}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-only-insecure-key-change-me}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-True}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend,nginx}
+      DJANGO_CORS_ALLOWED_ORIGINS: ${DJANGO_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      DJANGO_MEDIA_ROOT: /app/media
+      POSTGRES_DB: ${POSTGRES_DB:-discord}
+      POSTGRES_USER: ${POSTGRES_USER:-discord}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-discord}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+    volumes:
+      # Uploads survive a rebuild.
+      - media_data:/app/media
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/}
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+    volumes:
+      # The directory, not the file: a single-file bind mount pins the inode,
+      # so editing the config would not take effect on restart.
+      - ./nginx:/etc/nginx/conf.d:ro
+      # Uploads are served by nginx, not by Django.
+      - media_data:/srv/media:ro
+
+volumes:
+  postgres_data:
+  media_data:
