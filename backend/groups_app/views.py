@@ -4,6 +4,8 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.models import Profile
+
 from .models import Group
 from .serializers import GroupSerializer
 
@@ -54,6 +56,14 @@ class GroupAddRemoveMemberView(APIView):
         target_user = get_object_or_404(User, pk=user_id)
 
         if action == 'add':
+            # US-5.4 / SH.2 — the target's own flag decides, not the admin's.
+            target_profile, _ = Profile.objects.get_or_create(user=target_user)
+            if not target_profile.allow_invites:
+                return Response(
+                    {"error": f"کاربر {target_user.username} اجازه اضافه شدن به گروه‌ها را بسته است."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             group.members.add(target_user)
             return Response({"message": f"کاربر {target_user.username} به گروه اضافه شد."}, status=status.HTTP_200_OK)
         elif action == 'remove':

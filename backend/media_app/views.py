@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import generics, permissions
 from rest_framework.parsers import FormParser, MultiPartParser
 
@@ -24,4 +25,12 @@ class MediaDetailView(generics.RetrieveDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return MediaFile.objects.filter(user=self.request.user)
+        # US-7.2 — the uploader, plus anyone in a conversation the file was
+        # attached to. The check sits in front of the file, not on the path.
+        user = self.request.user
+        return MediaFile.objects.filter(
+            Q(user=user)
+            | Q(message__sender=user)
+            | Q(message__recipient=user)
+            | Q(message__group__members=user)
+        ).distinct()

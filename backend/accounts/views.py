@@ -34,6 +34,17 @@ class ProfileDetailView(generics.RetrieveUpdateAPIView):
         return profile
 
 
+class ProfileRetrieveAPIView(generics.RetrieveAPIView):
+    """Another user's profile, by user id — US-10.2."""
+    serializer_class = ProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'user__id'
+    lookup_url_kwarg = 'user_id'
+
+    def get_queryset(self):
+        return Profile.objects.all()
+
+
 class PrivacySettingsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
