@@ -61,6 +61,10 @@ class ChannelMember(models.Model):
     channel = models.ForeignKey(
         Channel, on_delete=models.CASCADE, related_name='memberships', verbose_name="کانال"
     )
+    role = models.ForeignKey(
+        'roles.Role', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='members', verbose_name="نقش",
+    )
     joined_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ عضویت")
 
     class Meta:
