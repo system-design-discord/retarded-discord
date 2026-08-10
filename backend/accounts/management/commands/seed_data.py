@@ -52,8 +52,12 @@ class Command(BaseCommand):
         )
 
         # 4. ساخت پیام‌ها
-        Message.objects.get_or_create(sender=majid, recipient=amirm, text="سلام امیر، تسک‌های فرانت‌اند چطور پیش میره؟")
+        Message.objects.get_or_create(
+            sender=majid, recipient=amirm, text="سلام امیر، تسک‌های فرانت‌اند چطور پیش میره؟"
+        )
         Message.objects.get_or_create(sender=amirm, recipient=majid, text="سلام مجید! داکرهای بک‌اند رو دادی بالا؟")
-        Message.objects.get_or_create(sender=majid, group=group, text="بچه‌ها این عکس معماری سیستم برای فاز دومه:", media=media)
+        Message.objects.get_or_create(
+            sender=majid, group=group, text="بچه‌ها این عکس معماری سیستم برای فاز دومه:", media=media
+        )
 
         self.stdout.write(self.style.SUCCESS('داده‌های اولیه با موفقیت در دیتابیس ذخیره شدند!'))

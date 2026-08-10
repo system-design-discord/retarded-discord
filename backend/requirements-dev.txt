@@ -1,0 +1,11 @@
+# Development and CI dependencies. Not installed into the production image by
+# default — docker-compose.yml passes INSTALL_DEV=true so that
+# `docker compose exec backend pytest` works during a sprint.
+
+# Test runner. pytest-django supplies the settings wiring, the db fixture and
+# the transactional rollback between tests.
+pytest==9.1.1
+pytest-django==4.13.0
+
+# Linter and import sorter, one tool. Config in ruff.toml.
+ruff==0.16.2

@@ -1,7 +1,9 @@
 import json
-from channels.generic.websocket import AsyncWebsocketConsumer
+
 from channels.db import database_sync_to_async
+from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth import get_user_model
+
 from groups_app.models import Group
 from messaging.models import Message
 
@@ -27,7 +29,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data):
         text_data_json = json.loads(text_data)
         message_text = text_data_json.get('message')
-        user_id = text_data_json.get('user_id') 
+        user_id = text_data_json.get('user_id')
         username = text_data_json.get('username')
 
         if message_text and user_id:
@@ -45,7 +47,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def chat_message(self, event):
         message = event['message']
         username = event['username']
-        
+
         await self.send(text_data=json.dumps({
             'message': message,
             'username': username

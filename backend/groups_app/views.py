@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import Profile
+from roles import services as roles
 
 from .models import Group
 from .serializers import GroupSerializer
@@ -33,9 +34,11 @@ class GroupDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
-        # برای تغییر یا حذف گروه، حتماً کاربر باید ادمین باشد
-        if request.method in ['PUT', 'PATCH', 'DELETE'] and obj.admin != request.user:
-            self.permission_denied(request, message="شما دسترسی لازم برای تغییر این گروه را ندارید.")
+        # architecture.tex §5.1: this module does not decide, it asks roles.
+        if request.method in ['PUT', 'PATCH', 'DELETE']:
+            permission = 'can_delete_channel' if request.method == 'DELETE' else 'can_edit_channel'
+            if not roles.has_group_permission(request.user, obj, permission):
+                self.permission_denied(request, message="شما دسترسی لازم برای تغییر این گروه را ندارید.")
 
 
 class GroupAddRemoveMemberView(APIView):
@@ -44,14 +47,26 @@ class GroupAddRemoveMemberView(APIView):
     def post(self, request, pk):
         group = get_object_or_404(Group, pk=pk)
 
-        if group.admin != request.user:
-            return Response({"error": "تنها ادمین گروه می‌تواند اعضا را مدیریت کند."}, status=status.HTTP_403_FORBIDDEN)
+        # architecture.tex §5.1: this module does not decide, it asks roles.
+        # The coarse gate runs before validation so a non-admin gets 403 rather
+        # than a hint about which parameters the endpoint wants.
+        if not any(roles.has_group_permission(request.user, group, p)
+                   for p in ('can_add_member', 'can_remove_member')):
+            return Response(
+                {"error": "تنها ادمین گروه می‌تواند اعضا را مدیریت کند."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         user_id = request.data.get("user_id")
         action = request.data.get("action")  # 'add' یا 'remove'
 
         if not user_id or action not in ['add', 'remove']:
             return Response({"error": "پارامترهای ارسال شده معتبر نیستند."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # ...and then the permission that actually matches what was asked for.
+        roles.require_group_permission(
+            request.user, group, 'can_add_member' if action == 'add' else 'can_remove_member'
+        )
 
         target_user = get_object_or_404(User, pk=user_id)
 
