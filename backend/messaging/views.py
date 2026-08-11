@@ -15,6 +15,7 @@ class MessageListCreateView(generics.ListCreateAPIView):
         user = self.request.user
         user_id = self.request.query_params.get('user_id')
         group_id = self.request.query_params.get('group_id')
+        topic_id = self.request.query_params.get('topic_id')
 
         if user_id:
             return Message.objects.filter(
@@ -24,6 +25,9 @@ class MessageListCreateView(generics.ListCreateAPIView):
 
         if group_id:
             return Message.objects.filter(group_id=group_id, group__members=user)
+
+        if topic_id:
+            return Message.objects.filter(topic_id=topic_id).visible_to(user)
 
         return Message.objects.filter(Q(sender=user) | Q(recipient=user) | Q(group__members=user)).distinct()
 
