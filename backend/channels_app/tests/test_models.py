@@ -1,9 +1,9 @@
-"""Channel and ChannelMember — the two entities the roles chain rests on."""
+"""Channel, ChannelMember and Topic — the entities the roles chain rests on."""
 
 import pytest
 from django.db import IntegrityError
 
-from channels_app.models import Channel, ChannelMember
+from channels_app.models import Channel, ChannelMember, Topic
 
 
 @pytest.fixture
@@ -44,3 +44,43 @@ def test_deleting_a_channel_removes_its_memberships(channel, other_user):
     channel.delete()
 
     assert ChannelMember.objects.count() == 0
+
+
+# --- Topic ---------------------------------------------------------------
+# Landed under R-05 rather than C-01: a channel message cannot exist without
+# it, and R-05's channel branch is untestable without a channel message.
+
+
+@pytest.mark.django_db
+def test_a_topic_belongs_to_a_channel(channel):
+    topic = Topic.objects.create(channel=channel, name='announcements')
+
+    assert topic in channel.topics.all()
+    assert str(topic) == '#announcements @ general'
+
+
+@pytest.mark.django_db
+def test_two_channels_may_each_have_a_topic_of_the_same_name(channel, other_user):
+    """A topic name is unique inside its channel, not across the product."""
+    elsewhere = Channel.objects.create(owner=other_user, name='other')
+
+    Topic.objects.create(channel=channel, name='general')
+    Topic.objects.create(channel=elsewhere, name='general')
+
+    assert Topic.objects.filter(name='general').count() == 2
+
+
+@pytest.mark.django_db
+def test_one_channel_cannot_have_two_topics_of_the_same_name(channel):
+    Topic.objects.create(channel=channel, name='general')
+
+    with pytest.raises(IntegrityError):
+        Topic.objects.create(channel=channel, name='general')
+
+
+@pytest.mark.django_db
+def test_deleting_a_channel_removes_its_topics(channel):
+    Topic.objects.create(channel=channel, name='general')
+    channel.delete()
+
+    assert Topic.objects.count() == 0
