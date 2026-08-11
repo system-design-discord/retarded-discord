@@ -1,5 +1,5 @@
 import { useState, useContext } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 
 export default function Login() {
@@ -8,13 +8,18 @@ export default function Login() {
   const [error, setError] = useState('');
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Look for the intended destination in state, otherwise default to dashboard
+  const from = location.state?.from?.pathname || '/dashboard';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     try {
       await login(username, password);
-      navigate('/dashboard');
+      // Navigate to the target route and replace the login page in browser history
+      navigate(from, { replace: true });
     } catch (err) {
       setError('Invalid username or password.');
     }

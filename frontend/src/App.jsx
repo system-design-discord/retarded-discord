@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useContext } from 'react';
 import { AuthContext } from './context/AuthContext';
 
@@ -17,10 +17,25 @@ import MyAccount from './components/settings/MyAccount';
 import PrivacySettings from './components/settings/PrivacySettings';
 import GroupInvitationPreferences from './components/settings/GroupInvitationPreferences';
 
+// A simple 404 component matching the dark mode aesthetic
+const NotFound = () => (
+  <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center">
+    <h1 className="text-6xl font-bold mb-4 text-slate-100">404</h1>
+    <p className="text-xl text-slate-400 mb-8">This page doesn't exist.</p>
+    <a href="/" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md transition-colors">
+      Return to Dashboard
+    </a>
+  </div>
+);
+
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
+  const location = useLocation(); // Captures the current URL the user is trying to hit
+
   if (loading) return <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">در حال بارگذاری...</div>;
-  return user ? children : <Navigate to="/login" />;
+  
+  // If not logged in, redirect to login AND pass the target location in state
+  return user ? children : <Navigate to="/login" state={{ from: location }} replace />;
 };
 
 function App() {
@@ -31,7 +46,7 @@ function App() {
         <Route path="/register" element={<Register />} />
 
         {/* آدرس اصلی خروجی مستقیم می‌ره به داشبورد اصلی */}
-        <Route path="/" element={<Navigate to="/dashboard" />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         
         <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
         <Route path="/dms" element={<PrivateRoute><DirectMessages /></PrivateRoute>} />
@@ -47,8 +62,8 @@ function App() {
         <Route path="/settings/privacy" element={<PrivateRoute><PrivacySettings /></PrivateRoute>} />
         <Route path="/settings/invitations" element={<PrivateRoute><GroupInvitationPreferences /></PrivateRoute>} />
 
-        {/* روت‌های ناشناخته هم می‌رن به داشبورد اصلی */}
-        <Route path="*" element={<Navigate to="/dashboard" />} />
+        {/* روت‌های ناشناخته به صفحه 404 هدایت می‌شوند */}
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </Router>
   );
