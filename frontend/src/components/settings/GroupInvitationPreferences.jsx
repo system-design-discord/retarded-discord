@@ -1,90 +1,187 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import api from '../../services/api';
 
 const GroupInvitationPreferences = () => {
-  const navigate = useNavigate();
-  const [invitePref, setInvitePref] = useState('approval');
+  // Mapping directly to the allow_invites requirement in the card
+  const [allowInvites, setAllowInvites] = useState('approval');
   const [pendingInvites, setPendingInvites] = useState([]);
-  const [feedback, setFeedback] = useState('Changes are saved after clicking Save Changes.');
+  
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [feedback, setFeedback] = useState({ type: '', message: '' });
 
-  const handleSave = (e) => {
+  useEffect(() => {
+    const fetchInvitationData = async () => {
+      try {
+        const [prefsRes, invitesRes] = await Promise.all([
+          api.get('auth/preferences/'),
+          api.get('groups/invites/pending/')
+        ]);
+        // Map the API's allow_invites field to our state
+        if (prefsRes.data.allow_invites) {
+          setAllowInvites(prefsRes.data.allow_invites);
+        }
+        setPendingInvites(invitesRes.data || []);
+      } catch (err) {
+        setFeedback({ type: 'error', message: 'Failed to load invitation data.' });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchInvitationData();
+  }, []);
+
+  const handleSave = async (e) => {
     e.preventDefault();
-    // API logic
-    setFeedback('Invitation preferences updated.');
+    setIsSaving(true);
+    setFeedback({ type: '', message: '' });
+
+    try {
+      await api.patch('auth/preferences/', { allow_invites: allowInvites });
+      setFeedback({ type: 'success', message: 'Invitation preferences updated.' });
+    } catch (err) {
+      const errorMsg = err.response?.data?.allow_invites?.[0] || err.response?.data?.detail || 'An error occurred while saving.';
+      setFeedback({ type: 'error', message: errorMsg });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleInviteAction = (id, action) => {
-    // API logic to accept/decline
+  const handleInviteAction = async (id, action) => {
+    try {
+      await api.post(`groups/invites/${id}/${action}/`);
+      setPendingInvites(prev => prev.filter(invite => invite.id !== id));
+      setFeedback({ type: 'success', message: `Invitation ${action}ed.` });
+    } catch (err) {
+      setFeedback({ type: 'error', message: `Failed to ${action} invitation.` });
+    }
   };
+
+  if (isLoading) {
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loading settings...</div>;
+  }
 
   return (
-    <div className="groups-dashboard" style={{ flexDirection: 'row', padding: 0 }}>
-      <aside className="groups-sidebar" style={{ width: '200px' }}>
-        <h3 style={{ marginBottom: '16px' }}>Navigation</h3>
-        <ul className="group-list">
-          <li onClick={() => navigate('/dashboard')}>Home</li>
-          <li onClick={() => navigate('/dms')}>Direct Messages</li>
-          <li onClick={() => navigate('/groups')}>Groups</li>
-          <li onClick={() => navigate('/channels')}>Channels</li>
-          <li onClick={() => navigate('/search')}>Search</li>
-          <li onClick={() => navigate('/notifications')}>Notifications</li>
-          <li onClick={() => navigate('/profile')}>Profile</li>
-          <li className="active" onClick={() => navigate('/settings/account')}>Settings</li>
-        </ul>
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex">
+      {/* Primary Sidebar */}
+      <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-2">
+        <div className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Navigation</div>
+        <Link to="/dashboard" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+          <span>🏠</span> Home
+        </Link>
+        <Link to="/dms" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+          <span>💬</span> Direct Messages
+        </Link>
+        <Link to="/groups" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+          <span>👥</span> Groups
+        </Link>
+        <Link to="/channels" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+          <span>📢</span> Channels
+        </Link>
+        <Link to="/search" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+          <span>🔍</span> Search
+        </Link>
+        <Link to="/notifications" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+          <span>🔔</span> Notifications
+        </Link>
+        <Link to="/settings/account" className="flex items-center gap-3 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium transition cursor-pointer">
+          <span>⚙️</span> Settings
+        </Link>
       </aside>
 
-      <aside className="groups-sidebar" style={{ borderLeft: '1px solid var(--border-color)' }}>
-        <h3 style={{ marginBottom: '16px' }}>User Settings</h3>
-        <ul className="group-list">
-          <li onClick={() => navigate('/settings/account')}>My Account</li>
-          <li onClick={() => navigate('/profile/edit')}>Profile</li>
-          <li onClick={() => navigate('/settings/privacy')}>Privacy</li>
-          <li className="active" onClick={() => navigate('/settings/invitations')}>Group Invitations</li>
-        </ul>
+      {/* Secondary Sidebar */}
+      <aside className="w-64 bg-slate-900/60 border-r border-slate-800/80 p-4 flex flex-col gap-2">
+        <div className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">User Settings</div>
+        <Link to="/settings/account" className="flex items-center px-4 py-2 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+          My Account
+        </Link>
+        <Link to="/profile/edit" className="flex items-center px-4 py-2 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+          Profile
+        </Link>
+        <Link to="/settings/privacy" className="flex items-center px-4 py-2 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+          Privacy
+        </Link>
+        <Link to="/settings/invitations" className="flex items-center px-4 py-2 bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 rounded-xl font-medium transition cursor-pointer">
+          Group Invitations
+        </Link>
       </aside>
 
-      <main className="settings-panel" style={{ flex: 1, overflowY: 'auto' }}>
-        <div className="settings-header">
-          <h1>Group Invitation Preferences</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Choose who is allowed to add you to group conversations.</p>
+      {/* Main Content Area */}
+      <main className="flex-1 p-8 overflow-y-auto">
+        <div className="max-w-2xl mx-auto space-y-8">
+          
+          <div className="border-b border-slate-800 pb-6">
+            <h1 className="text-3xl font-extrabold text-white mb-2">Group Invitation Preferences</h1>
+            <p className="text-slate-400 text-sm">Choose who is allowed to add you to group conversations.</p>
+          </div>
+
+          {feedback.message && (
+            <div className={`p-4 rounded-xl text-sm font-semibold border ${
+              feedback.type === 'error' ? 'bg-red-500/10 border-red-500/40 text-red-400' : 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400'
+            }`}>
+              {feedback.message}
+            </div>
+          )}
+
+          <form onSubmit={handleSave} className="space-y-8">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+              <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-6">Who Can Add Me to Groups</h3>
+              <div className="space-y-3">
+                {[
+                  { id: 'everyone', label: 'Everyone' },
+                  { id: 'friends', label: 'Friends / contacts only' },
+                  { id: 'approval', label: 'Ask for my approval' },
+                  { id: 'no-one', label: 'No one' }
+                ].map((option) => (
+                  <label key={option.id} className="flex items-center gap-3 p-4 border border-slate-800 rounded-xl hover:bg-slate-800/50 transition cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="allow_invites" 
+                      value={option.id} 
+                      checked={allowInvites === option.id} 
+                      onChange={(e) => setAllowInvites(e.target.value)} 
+                      className="w-4 h-4 accent-indigo-600 bg-slate-950 border-slate-700"
+                    />
+                    <span className="text-sm font-medium text-slate-200">{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+              <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-6">Pending Group Invitations</h3>
+              <div className="space-y-3">
+                {pendingInvites.length > 0 ? (
+                  pendingInvites.map(invite => (
+                    <div key={invite.id} className="flex items-center justify-between p-4 border border-slate-800 rounded-xl bg-slate-950/50">
+                      <div>
+                        <strong className="text-sm text-slate-200 block">{invite.groupName || invite.group_name}</strong>
+                        <span className="text-xs text-slate-500">Invited by @{invite.inviter || invite.inviter_username}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => handleInviteAction(invite.id, 'accept')} className="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/30 rounded-lg text-xs font-semibold transition cursor-pointer">
+                          Accept
+                        </button>
+                        <button type="button" onClick={() => handleInviteAction(invite.id, 'decline')} className="px-3 py-1.5 bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-500/30 rounded-lg text-xs font-semibold transition cursor-pointer">
+                          Decline
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500 text-center py-4">You have no pending group invitations.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-slate-800">
+              <button type="submit" disabled={isSaving} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium transition shadow-lg shadow-indigo-600/20 disabled:opacity-50 cursor-pointer">
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
         </div>
-
-        <form onSubmit={handleSave}>
-          <div className="settings-section">
-            <h3>Who Can Add Me to Groups</h3>
-            <div className="radio-group">
-              <label><input type="radio" name="invite" value="everyone" checked={invitePref === 'everyone'} onChange={(e) => setInvitePref(e.target.value)} /> <strong>Everyone</strong></label>
-              <label><input type="radio" name="invite" value="friends" checked={invitePref === 'friends'} onChange={(e) => setInvitePref(e.target.value)} /> <strong>Friends / contacts only</strong></label>
-              <label><input type="radio" name="invite" value="approval" checked={invitePref === 'approval'} onChange={(e) => setInvitePref(e.target.value)} /> <strong>Ask for my approval (selected)</strong></label>
-              <label><input type="radio" name="invite" value="no-one" checked={invitePref === 'no-one'} onChange={(e) => setInvitePref(e.target.value)} /> <strong>No one</strong></label>
-            </div>
-          </div>
-
-          <div className="settings-section">
-            <h3>Pending Group Invitations</h3>
-            {pendingInvites.length > 0 ? (
-              pendingInvites.map(invite => (
-                <div key={invite.id} className="toggle-row">
-                  <div><strong>{invite.groupName}</strong><br/><span style={{fontSize:'12px', color:'var(--text-secondary)'}}>Invited by @{invite.inviter}</span></div>
-                  <div className="action-buttons">
-                    <button type="button" className="btn-save" onClick={() => handleInviteAction(invite.id, 'accept')}>Accept</button>
-                    <button type="button" className="btn-cancel" onClick={() => handleInviteAction(invite.id, 'decline')}>Decline</button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>You have no pending group invitations.</p>
-            )}
-          </div>
-
-          <div className="settings-footer">
-            <div><strong>Feedback State</strong><p style={{ color: 'var(--text-secondary)' }}>{feedback}</p></div>
-            <div className="action-buttons">
-              <button type="button" className="btn-cancel">Cancel</button>
-              <button type="submit" className="btn-save">Save Changes</button>
-            </div>
-          </div>
-        </form>
       </main>
     </div>
   );
