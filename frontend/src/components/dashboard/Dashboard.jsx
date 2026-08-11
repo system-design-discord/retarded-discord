@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useContext } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { AuthContext } from '../../context/AuthContext'; // Import the AuthContext
 
 const RECENT_CHATS = [
   { id: 1, type: 'dms', title: 'Arman (Backend Lead)', lastMessage: 'API endpoints are ready for integration.', time: '10:45 AM' },
@@ -10,45 +11,50 @@ const RECENT_CHATS = [
 const Dashboard = () => {
   const navigate = useNavigate();
   const [recentChats] = useState(RECENT_CHATS);
+  
+  // Grab the user from context to display their name
+  const { user } = useContext(AuthContext); 
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
-      {/* Sidebar Navigation */}
+      {/* Sidebar Navigation - Upgraded to React Router Links */}
       <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-2">
         <div className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Navigation</div>
-        <button className="flex items-center gap-3 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium transition cursor-pointer">
+        <Link to="/dashboard" className="flex items-center gap-3 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium transition">
           <span>🏠</span> Home
-        </button>
-        <button onClick={() => navigate('/dms')} className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+        </Link>
+        <Link to="/dms" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition">
           <span>💬</span> Direct Messages
-        </button>
-        <button onClick={() => navigate('/groups')} className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+        </Link>
+        <Link to="/groups" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition">
           <span>👥</span> Groups
-        </button>
-        <button onClick={() => navigate('/channels')} className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+        </Link>
+        <Link to="/channels" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition">
           <span>📢</span> Channels
-        </button>
-        <button onClick={() => navigate('/search')} className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+        </Link>
+        <Link to="/search" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition">
           <span>🔍</span> Search
-        </button>
-        <button onClick={() => navigate('/notifications')} className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+        </Link>
+        <Link to="/notifications" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition">
           <span>🔔</span> Notifications
-        </button>
-        <button onClick={() => navigate('/profile')} className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+        </Link>
+        <Link to="/profile" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition">
           <span>👤</span> Profile
-        </button>
+        </Link>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 p-8 overflow-y-auto">
         <div className="max-w-4xl mx-auto space-y-8">
-          {/* Banner */}
+          {/* Banner - Dynamically pulling the user's name */}
           <div className="bg-gradient-to-r from-indigo-900/50 via-slate-900 to-slate-900 border border-indigo-500/30 rounded-2xl p-8 shadow-xl">
-            <h1 className="text-3xl font-extrabold text-white mb-2">Welcome Back, Amir!</h1>
+            <h1 className="text-3xl font-extrabold text-white mb-2">
+              Welcome Back, {user?.name || user?.username || 'Guest'}!
+            </h1>
             <p className="text-slate-400 text-sm">Jump right back into your conversations or start a new group chat.</p>
           </div>
 
-          {/* Quick Actions */}
+          {/* Quick Actions - These are fine as buttons since they act like cards */}
           <div>
             <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-4">Quick Actions</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
