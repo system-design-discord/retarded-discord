@@ -104,7 +104,12 @@ const GroupsDashboard = () => {
           )}
         </div>
 
-        {showModal && <CreateGroupModal onClose={() => setShowModal(false)} />}
+        {showModal && (
+  <CreateGroupModal 
+    onClose={() => setShowModal(false)} 
+    onGroupCreated={(newGroup) => setGroups(prevGroups => [newGroup, ...prevGroups])} 
+  />
+)}
       </main>
     </div>
   );
