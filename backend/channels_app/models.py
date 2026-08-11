@@ -1,18 +1,21 @@
 """Channels & Topics — architecture.tex §5.
 
-**Only two of this module's three entities live here so far.** `Channel` and
-`ChannelMember` landed under `R-01`, not `C-01`, because `roles.Role.channel`
-is a ForeignKey and the roles chain — nine cards across four people — could not
-start until a `Channel` existed to point at.
+**None of this module's three entities landed under its own card.** `Channel` and
+`ChannelMember` came in with `R-01`, because `roles.Role.channel` is a ForeignKey
+and the roles chain could not start until a `Channel` existed to point at.
+`Topic` came in with `R-05`, because message deletion in a channel cannot be
+demonstrated — or even reached — without a channel message to delete.
 
-`C-01` is still open and still owns the rest: the `Topic` entity and the sweep
-of this module against `ERD.tex`. `C-02`, `C-03` and `C-04` own the API; there
-are deliberately no views or serializers in this package yet.
+`C-01` is still open and still owns the sweep of this module against `ERD.tex`.
+`C-02`, `C-03` and `C-04` own the API; there are deliberately no views or
+serializers in this package yet, and `Topic` deliberately has no
+`can_create_topic` gate, which is `C-03`'s to write.
 
 One deviation from `ERD.tex` is recorded in execution-plan.md: the ERD gives
-`ChannelMember` a composite `(user_id, channel_id)` primary key. We express
-that as a surrogate key plus a uniqueness constraint, which enforces the same
-rule and keeps `Role.members` and DRF straightforward.
+`ChannelMember` a composite `(user_id, channel_id)` primary key. We express that
+as a surrogate key plus a uniqueness constraint, which enforces the same rule and
+keeps `Role.members` and DRF straightforward. `Topic` expresses its
+`(channel, name)` uniqueness the same way.
 """
 
 from django.contrib.auth import get_user_model
@@ -79,3 +82,30 @@ class ChannelMember(models.Model):
 
     def __str__(self):
         return f"{self.user.username} @ {self.channel.name}"
+
+
+class Topic(models.Model):
+    """A named sub-conversation inside a channel (US-4.5).
+
+    `user_stories_en.tex` is explicit that a channel is a collection of topics
+    and that **all** members may exchange messages in them — the per-topic
+    restriction in US-2.4 is on media, not on posting. Creating one requires
+    `can_create_topic`, which is C-03's gate, not this model's.
+    """
+
+    channel = models.ForeignKey(
+        Channel, on_delete=models.CASCADE, related_name='topics', verbose_name="کانال"
+    )
+    name = models.CharField(max_length=100, verbose_name="نام تاپیک")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['channel', 'name'], name='unique_topic_name_per_channel'),
+        ]
+        ordering = ['channel_id', 'name']
+        verbose_name = "تاپیک"
+        verbose_name_plural = "تاپیک‌ها"
+
+    def __str__(self):
+        return f"#{self.name} @ {self.channel.name}"

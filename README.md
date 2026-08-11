@@ -72,8 +72,8 @@ backend/          Django 6 + DRF + Channels, PostgreSQL
   common/           cross-module event seam
   accounts/         User, Profile, auth
   messaging/        Message
-  groups_app/       Group
-  channels_app/     Channel, ChannelMember (Topic still open — see its README)
+  groups_app/       Group, GroupMember
+  channels_app/     Channel, ChannelMember, Topic (no API yet — see its README)
   roles/            Role, permission evaluation
   media_app/        MediaFile
   notifications/    Notification
@@ -108,6 +108,24 @@ The eight permissions are `can_send_media`, `can_delete_message`, `can_create_to
 | `GET` `PATCH` `DELETE` | `/api/channels/<id>/roles/<role_id>/` | Read, rename, re-grant or delete one |
 | `GET` `PUT` `PATCH` | `/api/channels/<id>/members/<user_id>/role/` | Assign or clear a member's role |
 | `GET` | `/api/channels/<id>/me/permissions/` | What the caller may do in this channel |
+
+### Messages
+
+A message has **exactly one** target — a `recipient` (direct message), a `group`, or a `topic` in a
+channel — refused both by the serializer and by a database check constraint. What you may read is
+`Message.objects.visible_to(user)`, one queryset shared by every caller; anything outside it is a
+404, never a 403.
+
+Who may delete one is `roles.services.may_delete_message`, and it depends on where the message is:
+
+| Context | Who may delete | Stories |
+|---|---|---|
+| Any | the author, always | US-3.3 |
+| Group | the group admin | US-3.5, US-5.3 |
+| Channel topic | the channel owner, or a role granting `can_delete_message` | US-3.4, US-3.6, US-4.6 |
+| Direct message | only the author — never the recipient | US-3.3 |
+
+`backend/messaging/README.md` is the detail.
 
 `CLAUDE.md` has the fuller tour, including the current known gaps.
 

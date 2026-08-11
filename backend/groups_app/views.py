@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from accounts.models import Profile
 from roles import services as roles
 
-from .models import Group
+from .models import Group, GroupMember
 from .serializers import GroupSerializer
 
 User = get_user_model()
@@ -21,8 +21,10 @@ class GroupListCreateView(generics.ListCreateAPIView):
         return Group.objects.filter(members=self.request.user)
 
     def perform_create(self, serializer):
-        group = serializer.save(admin=self.request.user)
-        group.members.add(self.request.user)
+        # US-5.1 — the creator is the admin. One write, in GroupMember, which is
+        # now the only place that fact is recorded.
+        group = serializer.save()
+        GroupMember.objects.create(group=group, user=self.request.user, is_admin=True)
 
 
 class GroupDetailView(generics.RetrieveUpdateDestroyAPIView):

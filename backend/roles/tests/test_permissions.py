@@ -181,7 +181,7 @@ def test_the_group_admin_holds_the_group_permissions(user_factory):
     from groups_app.models import Group
 
     admin = user_factory('gadmin')
-    group = Group.objects.create(name='team', admin=admin)
+    group = Group.objects.create_with_admin(admin=admin, name='team')
     group.members.add(admin)
 
     assert services.has_group_permission(admin, group, 'can_remove_member') is True
@@ -194,7 +194,7 @@ def test_an_ordinary_group_member_holds_none_of_them(user_factory):
 
     admin = user_factory('gadmin')
     plain = user_factory('plain')
-    group = Group.objects.create(name='team', admin=admin)
+    group = Group.objects.create_with_admin(admin=admin, name='team')
     group.members.add(admin, plain)
 
     assert services.has_group_permission(plain, group, 'can_remove_member') is False
@@ -208,7 +208,7 @@ def test_channel_only_permissions_are_never_granted_over_a_group(user_factory):
     from groups_app.models import Group
 
     admin = user_factory('gadmin')
-    group = Group.objects.create(name='team', admin=admin)
+    group = Group.objects.create_with_admin(admin=admin, name='team')
 
     assert services.has_group_permission(admin, group, 'can_create_topic') is False
     assert services.has_group_permission(admin, group, 'can_change_role') is False

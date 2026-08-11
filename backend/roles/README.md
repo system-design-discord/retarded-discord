@@ -46,8 +46,12 @@ The channel owner implicitly holds all eight.
 | `require_permission(user, channel, permission)` | The same, but raises `PermissionDenied` |
 | `permissions_for(user, channel)` | All eight at once, as `{name: bool}` |
 | `is_channel_member(user, channel)` | Membership, which reading needs but no permission covers |
-| `has_group_permission(user, group, permission)` | The group-shaped equivalent — a group has no role table, only an admin |
+| `is_group_member(user, group)` | The group-shaped equivalent |
+| `require_channel_membership` / `require_group_membership` | The same two, but raising |
+| `has_group_permission(user, group, permission)` | A group has no role table, only an admin |
 | `require_group_permission(user, group, permission)` | The same, but raises |
+| `may_delete_message(user, message)` | `R-05` — the message's context picks which rule above applies |
+| `require_delete_message(user, message)` | The same, but raises |
 
 Every answer is read from database rows at call time. Nothing is cached, so an
 admin reassigning a role takes effect on the caller's **very next request** —
@@ -95,15 +99,36 @@ is exempt, because they hold all eight already.
 **Deleting a role does not orphan its members.** `ChannelMember.role` is
 `SET_NULL`: the holder stays in the channel holding nothing.
 
+## Deleting a message
+
+A message has no permissions of its own — its **target** decides which of the
+rules above applies, which is the whole of `may_delete_message`. It lives here so
+that `messaging/views.py` contains no `if` about authorship or ownership at all;
+`MessageDetailView.perform_destroy` is one call into this module.
+
+| Context | Who may delete | Stories |
+|---|---|---|
+| Any | the author, always | US-3.3 |
+| Group | the group admin | US-3.5, US-5.3 |
+| Channel topic | the channel owner, or a role granting `can_delete_message` | US-3.4, US-3.6, US-4.6 |
+| Direct message | only the author — never the recipient | US-3.3 |
+
+A message the caller cannot *see* returns **404**, not 403: refusing with 403
+would confirm that a conversation they are not in exists. Visibility is
+`messaging.Message.objects.visible_to`, which is membership, not permission.
+
 Assigning a role publishes `common.events.ROLE_CHANGED`. Notifications and the
 real-time gateway subscribe to it; this module does not import them.
 
 ## Status
 
-`R-01`, `R-04`, `R-02` and `R-03` are done. `R-05` — message deletion by a
-channel admin, a group admin, or a holder of `can_delete_message` — still calls
-in here rather than re-implementing the check, and `F-06` reads
-`me/permissions/` to decide which controls to show.
+`R-01`, `R-04`, `R-02`, `R-03` and `R-05` are done. **`messaging/` no longer
+decides anything for itself**, which was the last violation of
+architecture.tex §5.1 in the codebase. `F-06` — the role management UI — is the
+one card left in this chain; it reads `me/permissions/` to decide which controls
+to show, and `INT-2`'s matrix deliberately bypasses that UI to prove the server
+refuses regardless.
 
 Tests live in `roles/tests/`. `test_permissions.py` carries the sixteen-check
-permission matrix that `INT-2` also runs by hand against the API.
+permission matrix that `INT-2` also runs by hand against the API;
+`messaging/tests/test_delete_message.py` carries the `R-05` matrix.
