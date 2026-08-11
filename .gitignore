@@ -24,6 +24,10 @@ dist-ssr
 *.sw?
 
 
+# Tooling caches (pytest and ruff, both added with CI in PR #76)
+.pytest_cache/
+.ruff_cache/
+
 # Backend (Django)
 venv/
 .venv/
