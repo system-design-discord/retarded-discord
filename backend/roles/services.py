@@ -28,6 +28,7 @@ Two shapes of subject exist in the product, so there are two shapes of call:
 from rest_framework.exceptions import PermissionDenied
 
 from channels_app.models import ChannelMember
+from groups_app.models import GroupMember
 from roles.models import PERMISSION_FIELDS
 
 # Re-exported under the name the rest of the codebase reads better with.
@@ -153,7 +154,10 @@ def has_group_permission(user, group, permission):
     if permission not in GROUP_ADMIN_PERMISSIONS:
         return False
 
-    return group.admin_id == user.id
+    # M-04: who administers a group is one row in GroupMember, not a column on
+    # Group. There is exactly one source of truth for it and this is the only
+    # place in the product that reads it.
+    return GroupMember.objects.filter(group=group, user=user, is_admin=True).exists()
 
 
 def require_group_permission(user, group, permission):

@@ -36,8 +36,10 @@ class Command(BaseCommand):
         majid, amirm, arvin = created_users
 
         # 2. ساخت گروه
-        group, _ = Group.objects.get_or_create(name='گروه تست برنامه‌نویسان', defaults={'admin': majid})
-        group.members.add(majid, amirm, arvin)
+        group = Group.objects.filter(name='گروه تست برنامه‌نویسان').first()
+        if group is None:
+            group = Group.objects.create_with_admin(admin=majid, name='گروه تست برنامه‌نویسان')
+        group.members.add(amirm, arvin)
 
         # 3. ساخت مدیا تستی
         dummy_image = SimpleUploadedFile(

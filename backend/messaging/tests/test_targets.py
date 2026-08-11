@@ -16,7 +16,7 @@ from messaging.serializers import MessageSerializer
 
 @pytest.fixture
 def group(db, user, other_user):
-    g = Group.objects.create(name='team', admin=user)
+    g = Group.objects.create_with_admin(admin=user, name='team')
     g.members.add(user, other_user)
     return g
 

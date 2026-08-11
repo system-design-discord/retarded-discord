@@ -28,7 +28,7 @@ def outsider(user_factory):
 
 @pytest.fixture
 def group(db, admin, plain):
-    g = Group.objects.create(name='team', admin=admin)
+    g = Group.objects.create_with_admin(admin=admin, name='team')
     g.members.add(admin, plain)
     return g
 
