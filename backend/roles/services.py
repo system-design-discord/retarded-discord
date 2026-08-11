@@ -20,6 +20,9 @@ Two shapes of subject exist in the product, so there are two shapes of call:
   `has_group_permission` is a thin facade over that one rule. It lives here
   rather than in groups_app for exactly the reason above — the decision belongs
   to this module even when the rule is simple.
+* **Messages** are the third shape, and the only one that does not carry its own
+  rule: a message's *context* decides which of the two above applies.
+  `may_delete_message` does that dispatch, so `messaging/` never has to.
 """
 
 from rest_framework.exceptions import PermissionDenied
@@ -156,3 +159,47 @@ def has_group_permission(user, group, permission):
 def require_group_permission(user, group, permission):
     if not has_group_permission(user, group, permission):
         raise PermissionDenied("شما دسترسی لازم برای این عملیات را ندارید.")
+
+
+def may_delete_message(user, message):
+    """May `user` delete `message`? — US-3.3 to US-3.6, US-4.6 and US-5.3.
+
+    A message does not have permissions of its own; its target decides which
+    rule applies, and both of those rules already live above. That dispatch is
+    the whole card, and it is here rather than in `messaging/views.py` because
+    architecture.tex §5.1 says the messaging module does not decide this.
+
+    `user_stories_en.tex` §Assumptions for section 3 is exact about the three
+    cases:
+
+    * **In a group**, "aside from the message sender themselves, only the group
+      admin may delete a sent message."
+    * **In a channel**, "aside from the message sender, only the channel admin or
+      members holding the *delete members' messages* permission."
+    * **In a direct message** neither concept exists, so only the author — a
+      recipient deleting the other side's message would be rewriting somebody
+      else's history, not moderating a shared space.
+    """
+    if user is None or not user.is_authenticated:
+        return False
+
+    # US-3.3 — the author, in any of the three contexts, always.
+    if message.sender_id == user.id:
+        return True
+
+    # US-3.5 / US-5.3 — the group admin, and nobody else in the group.
+    if message.group_id is not None:
+        return has_group_permission(user, message.group, 'can_delete_message')
+
+    # US-3.4 / US-3.6 / US-4.6 — the channel owner implicitly, or a member whose
+    # role grants it. Both answers come from has_permission, unchanged.
+    if message.topic_id is not None:
+        return has_permission(user, message.topic.channel, 'can_delete_message')
+
+    return False
+
+
+def require_delete_message(user, message):
+    """`may_delete_message`, but raises so a view can simply call and continue."""
+    if not may_delete_message(user, message):
+        raise PermissionDenied("شما دسترسی لازم برای حذف این پیام را ندارید.")

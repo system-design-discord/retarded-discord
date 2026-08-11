@@ -84,3 +84,9 @@ class MessageDetailView(generics.RetrieveDestroyAPIView):
         conversation the caller is not in.
         """
         return Message.objects.visible_to(self.request.user)
+
+    def perform_destroy(self, instance):
+        """US-3.3 to US-3.6. The author, a group admin, a channel owner or a
+        holder of `can_delete_message` — and this module decides none of it."""
+        roles.require_delete_message(self.request.user, instance)
+        instance.delete()
