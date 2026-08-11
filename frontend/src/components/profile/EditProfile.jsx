@@ -1,18 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../../services/api';
 
 const EditProfile = () => {
   const navigate = useNavigate();
-  const [bio, setBio] = useState('Computer Engineering Student @ Sharif University. Working on CE-40418 Discord SPA.');
-  const [feedback, setFeedback] = useState('');
+  const [bio, setBio] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [feedback, setFeedback] = useState({ type: '', message: '' });
 
-  const handleSubmit = (e) => {
+  // Fetch current bio on load
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await api.get('auth/me/');
+        setBio(response.data.bio || '');
+      } catch (err) {
+        setFeedback({ type: 'error', message: 'Failed to load profile data.' });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setFeedback('Profile updated successfully!');
-    setTimeout(() => {
-      navigate('/profile');
-    }, 1000);
+    setIsSaving(true);
+    setFeedback({ type: '', message: '' });
+
+    try {
+      await api.patch('auth/me/', { bio });
+      setFeedback({ type: 'success', message: 'Profile updated successfully!' });
+      setTimeout(() => {
+        navigate('/profile');
+      }, 1000);
+    } catch (err) {
+      setFeedback({ type: 'error', message: 'Failed to update profile.' });
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  if (isLoading) {
+    return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loading editor...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
@@ -20,9 +52,11 @@ const EditProfile = () => {
         <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
           <h2 className="text-2xl font-extrabold text-white">Edit Profile</h2>
 
-          {feedback && (
-            <div className="bg-emerald-500/10 border border-emerald-500 text-emerald-400 p-3 rounded-xl text-xs text-center font-bold">
-              {feedback}
+          {feedback.message && (
+            <div className={`p-3 rounded-xl text-xs text-center font-bold border ${
+              feedback.type === 'error' ? 'bg-red-500/10 border-red-500 text-red-400' : 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
+            }`}>
+              {feedback.message}
             </div>
           )}
 
@@ -39,6 +73,7 @@ const EditProfile = () => {
                 onChange={(e) => setBio(e.target.value)}
                 rows="4"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition"
+                placeholder="Tell us about yourself..."
               ></textarea>
             </div>
 
@@ -46,15 +81,16 @@ const EditProfile = () => {
               <button
                 type="button"
                 onClick={() => navigate('/profile')}
-                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition"
+                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition shadow-lg shadow-indigo-600/20"
+                disabled={isSaving}
+                className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition shadow-lg shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
               >
-                Save Changes
+                {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </form>
