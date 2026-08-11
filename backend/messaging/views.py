@@ -1,7 +1,18 @@
+"""Messaging endpoints.
+
+Two rules, and neither is decided here:
+
+* **What you may read** is `Message.objects.visible_to(user)` — one definition,
+  shared by the list view, the detail view and (later) `M-08`'s search.
+* **What you may do** is `roles.services`' answer. architecture.tex §5.1: no
+  module decides permissions for itself, and that includes this one.
+"""
+
 from django.db.models import Q
 from rest_framework import generics, permissions
 
 from media_app.models import MediaFile
+from roles import services as roles
 
 from .models import Message
 from .serializers import MessageSerializer
@@ -12,26 +23,48 @@ class MessageListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        """One scope, three conversation selectors.
+
+        The scope is always `visible_to`; the query parameter only narrows it to
+        a single conversation. Asking for a conversation you are not in
+        therefore comes back empty rather than leaking somebody else's history.
+        """
         user = self.request.user
+        visible = Message.objects.visible_to(user)
+
         user_id = self.request.query_params.get('user_id')
         group_id = self.request.query_params.get('group_id')
         topic_id = self.request.query_params.get('topic_id')
 
         if user_id:
-            return Message.objects.filter(
-                (Q(sender=user) & Q(recipient_id=user_id)) |
-                (Q(sender_id=user_id) & Q(recipient=user))
+            return visible.filter(
+                (Q(sender=user) & Q(recipient_id=user_id))
+                | (Q(sender_id=user_id) & Q(recipient=user))
             )
 
         if group_id:
-            return Message.objects.filter(group_id=group_id, group__members=user)
+            return visible.filter(group_id=group_id)
 
         if topic_id:
-            return Message.objects.filter(topic_id=topic_id).visible_to(user)
+            return visible.filter(topic_id=topic_id)
 
-        return Message.objects.filter(Q(sender=user) | Q(recipient=user) | Q(group__members=user)).distinct()
+        return visible
 
     def perform_create(self, serializer):
+        """A DM needs nothing — US-2.1 lets anyone write to anyone. A group or a
+        topic message needs membership, which `roles` decides.
+
+        Before this check any authenticated user could post into any group,
+        which contradicted `M-02`'s own acceptance criterion.
+        """
+        group = serializer.validated_data.get('group')
+        topic = serializer.validated_data.get('topic')
+
+        if group is not None:
+            roles.require_group_membership(self.request.user, group)
+        if topic is not None:
+            roles.require_channel_membership(self.request.user, topic.channel)
+
         media_id = serializer.validated_data.pop('media_id', None)
         media_obj = MediaFile.objects.filter(id=media_id, user=self.request.user).first() if media_id else None
         serializer.save(sender=self.request.user, media=media_obj)
@@ -42,4 +75,12 @@ class MessageDetailView(generics.RetrieveDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Message.objects.filter(sender=self.request.user)
+        """Everything the caller may read, not only what they wrote.
+
+        This used to be `filter(sender=self.request.user)`, which meant a direct
+        message you *received* was unreadable, and an admin could not reach a
+        message in order to moderate it. A message outside this queryset still
+        returns 404 rather than 403, so nothing leaks the existence of a
+        conversation the caller is not in.
+        """
+        return Message.objects.visible_to(self.request.user)

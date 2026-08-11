@@ -117,6 +117,29 @@ def is_channel_member(user, channel):
     return ChannelMember.objects.filter(user=user, channel=channel).exists()
 
 
+def require_channel_membership(user, channel):
+    """`is_channel_member`, but raises. Posting into a topic needs this."""
+    if not is_channel_member(user, channel):
+        raise PermissionDenied("شما عضو این کانال نیستید.")
+
+
+def is_group_member(user, group):
+    """Membership again, group-shaped. Reading or posting in a group needs it.
+
+    It lives here for the same reason `has_group_permission` does: the rule is
+    trivial, but the *decision* belongs to this module, so no caller has to
+    remember whether the admin is separately a member (they always are).
+    """
+    if user is None or not user.is_authenticated:
+        return False
+    return group.members.filter(pk=user.pk).exists()
+
+
+def require_group_membership(user, group):
+    if not is_group_member(user, group):
+        raise PermissionDenied("شما عضو این گروه نیستید.")
+
+
 def has_group_permission(user, group, permission):
     """The group-shaped equivalent. The group admin holds the five permissions
     that mean anything for a group; ordinary members hold none of them."""
