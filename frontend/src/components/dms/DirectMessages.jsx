@@ -1,16 +1,13 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { AuthContext } from '../../context/AuthContext';
 
-const DirectMessages = () => {
-  const navigate = useNavigate();
-  const { user } = useContext(AuthContext);
-  
+// Extracting data logic into one place as requested by the card
+const useChatData = (user) => {
   const [conversations, setConversations] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -44,45 +41,65 @@ const DirectMessages = () => {
     fetchMessages();
   }, [activeChat]);
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !activeChat) return;
-
+  const sendMessage = async (content) => {
+    if (!content.trim() || !activeChat) return;
     try {
-      const response = await api.post(`dms/${activeChat.id}/messages/`, { content: newMessage });
+      const response = await api.post(`dms/${activeChat.id}/messages/`, { content });
       setMessages(prev => [...prev, response.data]);
-      setNewMessage('');
     } catch (error) {
       console.error("Error sending message:", error);
     }
   };
 
+  return { conversations, activeChat, setActiveChat, messages, loading, sendMessage };
+};
+
+const DirectMessages = () => {
+  const { user } = useContext(AuthContext);
+  const [newMessage, setNewMessage] = useState('');
+  
+  // All data fetching is cleanly contained here
+  const { 
+    conversations, 
+    activeChat, 
+    setActiveChat, 
+    messages, 
+    loading, 
+    sendMessage 
+  } = useChatData(user);
+
+  const handleSendMessage = (e) => {
+    e.preventDefault();
+    sendMessage(newMessage);
+    setNewMessage('');
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
-      {/* Navigation Sidebar */}
+      {/* Navigation Sidebar - Upgraded to Links */}
       <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-2">
         <div className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Navigation</div>
-        <button onClick={() => navigate('/dashboard')} className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+        <Link to="/dashboard" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
           <span>🏠</span> Home
-        </button>
-        <button className="flex items-center gap-3 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium transition cursor-pointer">
+        </Link>
+        <Link to="/dms" className="flex items-center gap-3 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium transition cursor-pointer">
           <span>💬</span> Direct Messages
-        </button>
-        <button onClick={() => navigate('/groups')} className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+        </Link>
+        <Link to="/groups" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
           <span>👥</span> Groups
-        </button>
-        <button onClick={() => navigate('/channels')} className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+        </Link>
+        <Link to="/channels" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
           <span>📢</span> Channels
-        </button>
-        <button onClick={() => navigate('/search')} className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+        </Link>
+        <Link to="/search" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
           <span>🔍</span> Search
-        </button>
-        <button onClick={() => navigate('/notifications')} className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+        </Link>
+        <Link to="/notifications" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
           <span>🔔</span> Notifications
-        </button>
-        <button onClick={() => navigate('/profile')} className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
+        </Link>
+        <Link to="/profile" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
           <span>👤</span> Profile
-        </button>
+        </Link>
       </aside>
 
       {/* Conversations Sub-Sidebar */}
