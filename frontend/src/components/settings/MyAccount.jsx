@@ -1,10 +1,18 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { AuthContext } from '../../context/AuthContext';
 
 const MyAccount = () => {
-  const { user, login } = useContext(AuthContext); // We might need login to refresh token if username changes
+  const { logout } = useContext(AuthContext);
+  const navigate = useNavigate();
+
+  // US-1.3 — the only place in the app a user can actually log out. The context
+  // blacklists the refresh token server-side before clearing localStorage.
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
   
   const [accountInfo, setAccountInfo] = useState({ username: '', email: '' });
   const [passwords, setPasswords] = useState({ current: '', new: '' });
@@ -199,6 +207,23 @@ const MyAccount = () => {
             </div>
 
           </form>
+
+          {/* US-1.3 — log out */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-white">Log out</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Ends this session everywhere it can be ended: the refresh token is invalidated on the server.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="px-6 py-2.5 bg-slate-800 hover:bg-rose-600/80 border border-slate-700 hover:border-rose-500 text-slate-200 hover:text-white rounded-xl font-semibold transition cursor-pointer shrink-0"
+            >
+              Log out
+            </button>
+          </div>
         </div>
       </main>
     </div>

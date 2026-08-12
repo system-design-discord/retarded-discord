@@ -8,14 +8,17 @@ const NotificationsCenter = () => {
   const [notifications, setNotifications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch notifications from the backend on load
+  const [error, setError] = useState('');
+
+  // Every list endpoint is paginated (PAGE_SIZE 50), so the body is
+  // {count, next, previous, results} — not an array.
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
         const response = await api.get('notifications/');
-        setNotifications(response.data);
-      } catch (err) {
-        console.error("Failed to load notifications:", err);
+        setNotifications(response.data.results ?? []);
+      } catch {
+        setError('Could not load your notifications.');
       } finally {
         setIsLoading(false);
       }
@@ -26,57 +29,39 @@ const NotificationsCenter = () => {
   const handleMarkAllRead = async () => {
     try {
       await api.post('notifications/mark-all-read/');
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true, is_read: true })));
-    } catch (err) {
-      console.error("Failed to mark all as read:", err);
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    } catch {
+      setError('Could not mark them read.');
     }
   };
 
-  // Smart click handler: Marks as read via API, then navigates based on the event type
+  // Mark read, then go where the notification points. The backend stores that
+  // path on the row itself, so the three kinds do not need three branches here.
   const handleNotificationClick = async (notif) => {
-    // If it's unread, tell the backend we are reading it now
-    if (!notif.isRead && !notif.is_read) {
+    if (!notif.is_read) {
       try {
         await api.post(`notifications/${notif.id}/read/`);
-        // Update local state instantly so the unread badge disappears
-        setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, isRead: true, is_read: true } : n));
-      } catch (err) {
-        console.error("Failed to mark as read:", err);
+        setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
+      } catch {
+        setError('Could not mark that one read.');
       }
     }
 
-    // Route based on the three event types required by the AC
-    const type = notif.type?.toLowerCase() || '';
-    if (type.includes('message')) {
-      navigate('/dms');
-    } else if (type.includes('group') || type.includes('invite') || type.includes('channel')) {
-      navigate('/groups');
-    } else if (type.includes('role')) {
-      navigate('/profile');
-    } else if (notif.link) {
-      navigate(notif.link); // Fallback if the backend provides a direct link
+    if (notif.link) {
+      navigate(notif.link);
     }
   };
 
-  // Keep the dedicated invite action for inline accept/decline buttons
-  const handleInviteAction = async (e, id, action) => {
-    e.stopPropagation(); // Prevent the main notification click handler from firing
-    try {
-      await api.post(`groups/invites/${id}/${action}/`);
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    } catch (err) {
-      console.error(`Failed to ${action} invite:`, err);
-    }
+  // The three kinds are Notification.Kind on the backend, and there are exactly
+  // three because US-11.1 names exactly three.
+  const TABS = {
+    All: () => true,
+    Messages: notif => notif.type === 'message',
+    Invites: notif => notif.type === 'member_added',
+    System: notif => notif.type === 'role_changed',
   };
 
-  // Filter logic based on tabs
-  const filteredNotifications = notifications.filter(notif => {
-    if (activeTab === 'All') return true;
-    if (activeTab === 'Messages') return notif.type?.includes('message');
-    if (activeTab === 'Invites') return notif.type?.includes('invite') || notif.type?.includes('group');
-    if (activeTab === 'System') return notif.type?.includes('role');
-    return true;
-  });
+  const filteredNotifications = notifications.filter(TABS[activeTab] ?? (() => true));
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
@@ -124,7 +109,7 @@ const NotificationsCenter = () => {
 
           {/* Filter Tabs */}
           <div className="flex gap-2">
-            {['All', 'Messages', 'Invites', 'System'].map(tab => (
+            {Object.keys(TABS).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -137,13 +122,19 @@ const NotificationsCenter = () => {
             ))}
           </div>
 
+          {error && (
+            <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 text-rose-300 text-xs">
+              {error}
+            </div>
+          )}
+
           {/* Notifications List */}
           <div className="space-y-3">
             {isLoading ? (
                <div className="text-center text-slate-500 text-sm py-12">Loading notifications...</div>
             ) : filteredNotifications.length > 0 ? (
               filteredNotifications.map(notif => {
-                const isRead = notif.isRead || notif.is_read;
+                const isRead = notif.is_read;
                 return (
                   <div
                     key={notif.id}
@@ -157,14 +148,9 @@ const NotificationsCenter = () => {
                     <div className="flex-1">
                       <strong className="text-sm text-white">{notif.title}</strong>
                       <p className="text-xs text-slate-400 mt-1">{notif.body}</p>
-                      
-                      {/* Inline Invite Actions */}
-                      {notif.type?.includes('invite') && (
-                        <div className="flex gap-2 mt-3">
-                          <button onClick={(e) => handleInviteAction(e, notif.id, 'accept')} className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition">Accept</button>
-                          <button onClick={(e) => handleInviteAction(e, notif.id, 'decline')} className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition border border-slate-700">Decline</button>
-                        </div>
-                      )}
+                      <p className="text-[11px] text-slate-600 mt-2">
+                        {new Date(notif.created_at).toLocaleString()}
+                      </p>
                     </div>
                   </div>
                 );

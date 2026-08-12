@@ -165,6 +165,33 @@ def require_group_permission(user, group, permission):
         raise PermissionDenied("شما دسترسی لازم برای این عملیات را ندارید.")
 
 
+def may_edit_message(user, message):
+    """May `user` edit `message`? — US-3.1 and US-3.2.
+
+    **Only the author, in every context, with no exception at all.** US-3.2 is
+    unusually explicit about it — *"I want only and exclusively myself to be able
+    to edit my own sent message, so that no one can distort my message"* — which
+    makes editing the mirror image of `may_delete_message` below: a channel
+    owner, a group admin and a holder of `can_delete_message` may all *remove* a
+    message, and none of them may *change* it. Moderation is deleting somebody's
+    words, not putting different ones in their mouth.
+
+    It lives here rather than as an `if` in `messaging/views.py` for the same
+    reason everything else does (architecture.tex §5.1). That the rule is one
+    line is not a reason to move the decision back into the module that asks.
+    """
+    if user is None or not user.is_authenticated:
+        return False
+
+    return message.sender_id == user.id
+
+
+def require_edit_message(user, message):
+    """`may_edit_message`, but raises so a view can simply call and continue."""
+    if not may_edit_message(user, message):
+        raise PermissionDenied("تنها نویسندهٔ پیام می‌تواند آن را ویرایش کند.")
+
+
 def may_delete_message(user, message):
     """May `user` delete `message`? — US-3.3 to US-3.6, US-4.6 and US-5.3.
 

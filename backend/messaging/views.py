@@ -9,13 +9,15 @@ Two rules, and neither is decided here:
 """
 
 from django.db.models import Q
+from django.utils import timezone
 from rest_framework import generics, permissions
 
+from common import events
 from media_app.models import MediaFile
 from roles import services as roles
 
 from .models import Message
-from .serializers import MessageSerializer
+from .serializers import MessageEditSerializer, MessageSearchSerializer, MessageSerializer
 
 
 class MessageListCreateView(generics.ListCreateAPIView):
@@ -67,12 +69,23 @@ class MessageListCreateView(generics.ListCreateAPIView):
 
         media_id = serializer.validated_data.pop('media_id', None)
         media_obj = MediaFile.objects.filter(id=media_id, user=self.request.user).first() if media_id else None
-        serializer.save(sender=self.request.user, media=media_obj)
+        message = serializer.save(sender=self.request.user, media=media_obj)
+
+        # Notifications and the real-time gateway subscribe to this rather than
+        # being imported here (architecture.tex §5.1, common/events.py). A
+        # handler that raises is logged and skipped, so a failed notification
+        # can never fail the message that triggered it.
+        events.publish(events.MESSAGE_CREATED, message=message)
 
 
-class MessageDetailView(generics.RetrieveDestroyAPIView):
-    serializer_class = MessageSerializer
+class MessageDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        """Reads use the full shape; writes use the text-only one — M-06."""
+        if self.request.method in ('PUT', 'PATCH'):
+            return MessageEditSerializer
+        return MessageSerializer
 
     def get_queryset(self):
         """Everything the caller may read, not only what they wrote.
@@ -85,8 +98,43 @@ class MessageDetailView(generics.RetrieveDestroyAPIView):
         """
         return Message.objects.visible_to(self.request.user)
 
+    def perform_update(self, serializer):
+        """US-3.1 and US-3.2 — only the author, and `roles` says who that is.
+
+        Unlike deletion, no admin and no permission overrides this: a moderator
+        removes a message, they do not rewrite it. The rule is
+        `roles.services.may_edit_message`; this module only asks.
+        """
+        roles.require_edit_message(self.request.user, serializer.instance)
+        serializer.save(is_edited=True, edited_at=timezone.now())
+
     def perform_destroy(self, instance):
         """US-3.3 to US-3.6. The author, a group admin, a channel owner or a
         holder of `can_delete_message` — and this module decides none of it."""
         roles.require_delete_message(self.request.user, instance)
         instance.delete()
+
+
+class MessageSearchView(generics.ListAPIView):
+    """US-9.1 — search message text across all three kinds of conversation.
+
+    There is no separate scope here and there must not be: the queryset is
+    `visible_to(user).search(q)`, so the criterion "results never include
+    messages from conversations the caller is not in" is a property of the
+    composition rather than a check somebody has to keep in step with the list
+    view. PostgreSQL full-text with a GIN index, which is what
+    `architecture.tex` chose over standing up a second datastore.
+    """
+
+    serializer_class = MessageSearchSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        term = self.request.query_params.get('q', '')
+
+        return (
+            Message.objects
+            .visible_to(self.request.user)
+            .search(term)
+            .select_related('sender', 'recipient', 'group', 'topic__channel', 'media')
+        )
