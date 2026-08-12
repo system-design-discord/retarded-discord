@@ -10,24 +10,13 @@ from rest_framework import generics, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from channels_app.models import Channel, ChannelMember
+from channels_app.models import ChannelMember
 from common import events
+from common.mixins import ChannelScopedMixin
 from common.permissions import HasChannelPermission, IsChannelMember
 from roles import services
 from roles.models import Role
 from roles.serializers import MemberRoleSerializer, RoleSerializer
-
-
-class ChannelScopedMixin:
-    """Resolves the channel in the URL and hands it to the permission class."""
-
-    def get_channel(self):
-        if not hasattr(self, '_channel'):
-            self._channel = get_object_or_404(Channel, pk=self.kwargs['channel_id'])
-        return self._channel
-
-    def get_serializer_context(self):
-        return {**super().get_serializer_context(), 'channel': self.get_channel()}
 
 
 class RoleListCreateView(ChannelScopedMixin, generics.ListCreateAPIView):
