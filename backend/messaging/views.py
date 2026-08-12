@@ -9,13 +9,14 @@ Two rules, and neither is decided here:
 """
 
 from django.db.models import Q
+from django.utils import timezone
 from rest_framework import generics, permissions
 
 from media_app.models import MediaFile
 from roles import services as roles
 
 from .models import Message
-from .serializers import MessageSerializer
+from .serializers import MessageEditSerializer, MessageSerializer
 
 
 class MessageListCreateView(generics.ListCreateAPIView):
@@ -70,9 +71,14 @@ class MessageListCreateView(generics.ListCreateAPIView):
         serializer.save(sender=self.request.user, media=media_obj)
 
 
-class MessageDetailView(generics.RetrieveDestroyAPIView):
-    serializer_class = MessageSerializer
+class MessageDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_serializer_class(self):
+        """Reads use the full shape; writes use the text-only one — M-06."""
+        if self.request.method in ('PUT', 'PATCH'):
+            return MessageEditSerializer
+        return MessageSerializer
 
     def get_queryset(self):
         """Everything the caller may read, not only what they wrote.
@@ -84,6 +90,16 @@ class MessageDetailView(generics.RetrieveDestroyAPIView):
         conversation the caller is not in.
         """
         return Message.objects.visible_to(self.request.user)
+
+    def perform_update(self, serializer):
+        """US-3.1 and US-3.2 — only the author, and `roles` says who that is.
+
+        Unlike deletion, no admin and no permission overrides this: a moderator
+        removes a message, they do not rewrite it. The rule is
+        `roles.services.may_edit_message`; this module only asks.
+        """
+        roles.require_edit_message(self.request.user, serializer.instance)
+        serializer.save(is_edited=True, edited_at=timezone.now())
 
     def perform_destroy(self, instance):
         """US-3.3 to US-3.6. The author, a group admin, a channel owner or a

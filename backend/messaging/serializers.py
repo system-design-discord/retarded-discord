@@ -21,8 +21,9 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sender', 'recipient', 'group', 'topic',
             'text', 'media', 'media_id', 'created_at', 'is_read',
+            'is_edited', 'edited_at',
         ]
-        read_only_fields = ['id', 'sender', 'created_at', 'is_read']
+        read_only_fields = ['id', 'sender', 'created_at', 'is_read', 'is_edited', 'edited_at']
 
     def validate(self, attrs):
         """Exactly one target — US-2.1 (DM), US-2.2 (group), US-2.3 (topic).
@@ -41,3 +42,32 @@ class MessageSerializer(serializers.ModelSerializer):
                 "پیام باید تنها یک مقصد داشته باشد: کاربر، گروه یا تاپیک."
             )
         return attrs
+
+
+class MessageEditSerializer(serializers.ModelSerializer):
+    """M-06 — the *only* field an edit may touch is `text`.
+
+    Editing through `MessageSerializer` would leave `recipient`, `group` and
+    `topic` writable, so a PATCH could move somebody's message into a different
+    conversation while keeping its author and timestamp. US-3.1 is about fixing a
+    typo; it is not a re-address facility, and the narrower serializer is what
+    makes that structural rather than a rule somebody has to remember.
+    """
+
+    sender = UserSerializer(read_only=True)
+    media = MediaFileSerializer(read_only=True)
+
+    class Meta:
+        model = Message
+        fields = [
+            'id', 'sender', 'recipient', 'group', 'topic',
+            'text', 'media', 'created_at', 'is_read', 'is_edited', 'edited_at',
+        ]
+        read_only_fields = [
+            field for field in fields if field != 'text'
+        ]
+
+    def validate_text(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("متن پیام نمی‌تواند خالی باشد.")
+        return value
