@@ -2,8 +2,25 @@ from django.contrib import admin
 
 from .models import Channel, ChannelMember, Topic
 
-# C-02/C-03/C-04 have not landed, so there is no channel API yet: until they do,
-# the admin is how INT-2 and INT-3 build a channel to verify against.
-admin.site.register(Channel)
-admin.site.register(ChannelMember)
-admin.site.register(Topic)
+
+@admin.register(Channel)
+class ChannelAdmin(admin.ModelAdmin):
+    list_display = ('name', 'owner', 'created_at')
+    list_select_related = ('owner',)
+    search_fields = ('name', 'owner__username')
+
+
+@admin.register(Topic)
+class TopicAdmin(admin.ModelAdmin):
+    list_display = ('name', 'channel', 'created_at')
+    list_select_related = ('channel',)
+    list_filter = ('channel',)
+    search_fields = ('name',)
+
+
+@admin.register(ChannelMember)
+class ChannelMemberAdmin(admin.ModelAdmin):
+    list_display = ('user', 'channel', 'role', 'joined_at')
+    list_select_related = ('user', 'channel', 'role')
+    list_filter = ('channel',)
+    search_fields = ('user__username', 'channel__name')
