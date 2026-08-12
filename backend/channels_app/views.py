@@ -19,8 +19,8 @@ from rest_framework.response import Response
 from common.mixins import ChannelScopedMixin
 from common.permissions import HasChannelPermission, IsChannelMember
 
-from .models import Channel
-from .serializers import ChannelSerializer
+from .models import Channel, Topic
+from .serializers import ChannelSerializer, TopicSerializer
 
 
 def _deletion_report(deleted_per_model):
@@ -115,3 +115,58 @@ class ChannelDetailView(ChannelScopedMixin, generics.RetrieveUpdateDestroyAPIVie
         """
         _, deleted_per_model = self.get_object().delete()
         return Response({'deleted': _deletion_report(deleted_per_model)})
+
+
+class TopicListCreateView(ChannelScopedMixin, generics.ListCreateAPIView):
+    """US-4.5 — create topics so a channel's discussion is categorised.
+
+    Reading needs only membership. `user_stories_en.tex` is explicit that a
+    channel is a collection of topics and that **all** members may exchange
+    messages in them — the restriction in US-2.4 is on media, not on posting —
+    so there is no per-topic read gate to write here.
+    """
+
+    serializer_class = TopicSerializer
+    required_permission = 'can_create_topic'
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [permissions.IsAuthenticated(), HasChannelPermission()]
+        return [permissions.IsAuthenticated(), IsChannelMember()]
+
+    def get_queryset(self):
+        return Topic.objects.filter(channel=self.get_channel())
+
+    def perform_create(self, serializer):
+        serializer.save(channel=self.get_channel())
+
+
+class TopicDetailView(ChannelScopedMixin, generics.RetrieveUpdateDestroyAPIView):
+    """Read, rename or delete one topic.
+
+    Renaming and deleting are channel administration, so they take
+    `can_edit_channel` rather than `can_create_topic`: being trusted to open a
+    discussion is not the same as being trusted to close somebody else's.
+    """
+
+    serializer_class = TopicSerializer
+    required_permission = 'can_edit_channel'
+
+    def get_permissions(self):
+        if self.request.method in ('PUT', 'PATCH', 'DELETE'):
+            return [permissions.IsAuthenticated(), HasChannelPermission()]
+        return [permissions.IsAuthenticated(), IsChannelMember()]
+
+    def get_queryset(self):
+        """Scoped to the channel in the URL, so a topic belonging to another
+        channel is a 404 here rather than something this gate decides on."""
+        return Topic.objects.filter(channel=self.get_channel())
+
+    def destroy(self, request, *args, **kwargs):
+        """C-03: deleting a topic must not silently delete its messages.
+
+        `Topic.messages` is CASCADE, so they go. The response says how many
+        rather than answering 204 and leaving the caller to find out.
+        """
+        _, deleted_per_model = self.get_object().delete()
+        return Response({'deleted_messages': _deletion_report(deleted_per_model)['messages']})
