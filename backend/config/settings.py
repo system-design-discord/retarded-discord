@@ -45,6 +45,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # US-9.1 full-text search: SearchVector and GinIndex live here, and both
+    # are PostgreSQL-only. architecture.tex chose Postgres over a separate
+    # search engine deliberately, so this is the whole of that dependency.
+    'django.contrib.postgres',
     'rest_framework',
     'rest_framework_simplejwt',
     # SIMPLE_JWT sets BLACKLIST_AFTER_ROTATION, which needs this app installed.
