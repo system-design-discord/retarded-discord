@@ -16,10 +16,21 @@ deviation is recorded in execution-plan.md.
 """
 
 from django.contrib.auth import get_user_model
+from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 from django.db import models
 from django.db.models import Q
 
 User = get_user_model()
+
+# US-9.1 full-text search. The configuration is `simple` — no stemming, no stop
+# words — rather than `english`, because the product's message text is mixed
+# Persian and English: an English stemmer would quietly mangle one of the two
+# languages it is asked about. It must be the *same* string in the index and in
+# the query, or PostgreSQL builds a vector the index cannot answer and falls
+# back to a sequential scan without saying so.
+SEARCH_CONFIG = 'simple'
+SEARCH_VECTOR = SearchVector('text', config=SEARCH_CONFIG)
 
 
 class MessageQuerySet(models.QuerySet):
@@ -49,6 +60,28 @@ class MessageQuerySet(models.QuerySet):
             | Q(topic__channel__memberships__user=user)     # a channel you joined
             | Q(topic__channel__owner=user)                 # a channel you own
         ).distinct()
+
+    def search(self, term):
+        """US-9.1 — messages whose text matches `term`, best match first.
+
+        **Call it on `visible_to(user)`, never on the manager.** Scoping is not
+        this method's job and deliberately not its business: the acceptance
+        criterion is that a term appearing only in a stranger's conversation
+        returns nothing, and that is true by construction when the only rows
+        this can rank are the rows `visible_to` already allowed. A second
+        hand-written scope here would be a second definition of who may read
+        what, which is the bug `visible_to` was written to end.
+        """
+        if not term or not term.strip():
+            return self.none()
+
+        query = SearchQuery(term, config=SEARCH_CONFIG)
+
+        return (
+            self.annotate(search=SEARCH_VECTOR, rank=SearchRank(SEARCH_VECTOR, query))
+            .filter(search=query)
+            .order_by('-rank', '-created_at')
+        )
 
 
 class Message(models.Model):
@@ -82,6 +115,12 @@ class Message(models.Model):
 
     class Meta:
         ordering = ['created_at']
+        indexes = [
+            # An *expression* index over the same SearchVector the query builds,
+            # so US-9.1's search needs no denormalised column and the model
+            # keeps the exact shape ERD.tex gives it.
+            GinIndex(SEARCH_VECTOR, name='message_text_search'),
+        ]
         constraints = [
             models.CheckConstraint(
                 condition=(

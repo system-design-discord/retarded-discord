@@ -17,7 +17,7 @@ from media_app.models import MediaFile
 from roles import services as roles
 
 from .models import Message
-from .serializers import MessageEditSerializer, MessageSerializer
+from .serializers import MessageEditSerializer, MessageSearchSerializer, MessageSerializer
 
 
 class MessageListCreateView(generics.ListCreateAPIView):
@@ -113,3 +113,28 @@ class MessageDetailView(generics.RetrieveUpdateDestroyAPIView):
         holder of `can_delete_message` — and this module decides none of it."""
         roles.require_delete_message(self.request.user, instance)
         instance.delete()
+
+
+class MessageSearchView(generics.ListAPIView):
+    """US-9.1 — search message text across all three kinds of conversation.
+
+    There is no separate scope here and there must not be: the queryset is
+    `visible_to(user).search(q)`, so the criterion "results never include
+    messages from conversations the caller is not in" is a property of the
+    composition rather than a check somebody has to keep in step with the list
+    view. PostgreSQL full-text with a GIN index, which is what
+    `architecture.tex` chose over standing up a second datastore.
+    """
+
+    serializer_class = MessageSearchSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        term = self.request.query_params.get('q', '')
+
+        return (
+            Message.objects
+            .visible_to(self.request.user)
+            .search(term)
+            .select_related('sender', 'recipient', 'group', 'topic__channel', 'media')
+        )

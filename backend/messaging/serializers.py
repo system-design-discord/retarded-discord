@@ -71,3 +71,41 @@ class MessageEditSerializer(serializers.ModelSerializer):
         if not value or not value.strip():
             raise serializers.ValidationError("متن پیام نمی‌تواند خالی باشد.")
         return value
+
+
+class MessageSearchSerializer(MessageSerializer):
+    """A search hit — a message, plus which conversation it is in.
+
+    "Results say which conversation each hit is in" is one of `M-08`'s
+    acceptance criteria, and it is the whole reason a search result is a
+    different shape from a message: in a chat you already know where you are,
+    and in a list of hits across three kinds of conversation you do not.
+    """
+
+    conversation = serializers.SerializerMethodField()
+
+    class Meta(MessageSerializer.Meta):
+        fields = [*MessageSerializer.Meta.fields, 'conversation']
+
+    def get_conversation(self, message):
+        """`kind` is what the client routes on; `name` is what it shows.
+
+        `id` is the id of the thing the SPA navigates to, which for a direct
+        message is *the other person* — not the message, and not the caller.
+        """
+        if message.group_id is not None:
+            return {'kind': 'group', 'id': message.group_id, 'name': message.group.name}
+
+        if message.topic_id is not None:
+            topic = message.topic
+            return {
+                'kind': 'topic',
+                'id': topic.pk,
+                'name': f'{topic.channel.name} › {topic.name}',
+                'channel_id': topic.channel_id,
+            }
+
+        request = self.context.get('request')
+        me = getattr(request, 'user', None)
+        other = message.recipient if (me and message.sender_id == me.pk) else message.sender
+        return {'kind': 'dm', 'id': other.pk, 'name': other.username}
