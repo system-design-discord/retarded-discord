@@ -88,6 +88,20 @@ def test_the_notification_says_where_the_message_was(auth_client, user, other_us
     assert notification.link == f'/chat/{group.pk}'
 
 
+@pytest.mark.django_db
+def test_a_direct_message_notification_does_not_name_the_sender_twice(
+    auth_client, user, other_user
+):
+    """A DM has no third place to name; the template must not pretend it does."""
+    auth_client(user).post(
+        '/api/messages/', {'recipient': other_user.pk, 'text': 'hello'}, format='json'
+    )
+
+    notification = Notification.objects.get(user=other_user)
+    assert notification.content.count(user.username) == 1
+    assert notification.link == f'/dms?user={user.pk}'
+
+
 # --- being added to a group or a channel --------------------------------
 
 

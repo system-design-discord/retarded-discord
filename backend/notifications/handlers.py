@@ -42,23 +42,37 @@ def _recipients_of(message):
     return []
 
 
-def _where(message):
-    """The conversation a message is in, as a name and an SPA path."""
+def _describe(message):
+    """What to say about a new message, and where it takes the reader.
+
+    A direct message has no third place to name — saying "from majid in majid"
+    reads as a bug even though it is only a template with one slot too many —
+    so the DM case is a different sentence rather than the same one with a
+    duplicated name.
+    """
+    sender = message.sender.username
+
     if message.group_id is not None:
-        return message.group.name, f'/chat/{message.group_id}'
+        return f"پیام جدید از {sender} در گروه {message.group.name}", f'/chat/{message.group_id}'
+
     if message.topic_id is not None:
-        return f'{message.topic.channel.name} › {message.topic.name}', '/channels'
-    return message.sender.username, '/dms'
+        topic = message.topic
+        return (
+            f"پیام جدید از {sender} در {topic.channel.name} › {topic.name}",
+            f'/channels?channel={topic.channel_id}&topic={topic.pk}',
+        )
+
+    return f"پیام جدید از {sender}", f'/dms?user={message.sender_id}'
 
 
 def on_message_created(message, **_):
     """US-11.1, first event — a new message."""
-    where, link = _where(message)
+    content, link = _describe(message)
 
     notify_many(
         _recipients_of(message),
         Notification.Kind.MESSAGE,
-        f"پیام جدید از {message.sender.username} در {where}",
+        content,
         link=link,
         actor=message.sender,
     )
@@ -71,7 +85,7 @@ def on_member_added(user, actor=None, channel=None, group=None, **_):
     `group=` respectively, so the handler takes either.
     """
     if channel is not None:
-        where, link = channel.name, '/channels'
+        where, link = channel.name, f'/channels?channel={channel.pk}'
     elif group is not None:
         where, link = group.name, f'/chat/{group.pk}'
     else:
