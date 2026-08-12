@@ -73,7 +73,7 @@ backend/          Django 6 + DRF + Channels, PostgreSQL
   accounts/         User, Profile, auth
   messaging/        Message
   groups_app/       Group, GroupMember
-  channels_app/     Channel, ChannelMember, Topic (no API yet — see its README)
+  channels_app/     Channel, ChannelMember, Topic; channel, topic and member API
   roles/            Role, permission evaluation
   media_app/        MediaFile
   notifications/    Notification
@@ -108,6 +108,34 @@ The eight permissions are `can_send_media`, `can_delete_message`, `can_create_to
 | `GET` `PATCH` `DELETE` | `/api/channels/<id>/roles/<role_id>/` | Read, rename, re-grant or delete one |
 | `GET` `PUT` `PATCH` | `/api/channels/<id>/members/<user_id>/role/` | Assign or clear a member's role |
 | `GET` | `/api/channels/<id>/me/permissions/` | What the caller may do in this channel |
+
+### Channels
+
+A channel has an owner, members, topics and its own roles. Creating one makes you
+its owner, and the owner implicitly holds all eight permissions — there is no role
+row to lose. Every other action is gated by one of them, evaluated by `roles`.
+
+| Method | Endpoint | Needs |
+|---|---|---|
+| `GET` `POST` | `/api/channels/` | authentication; the list is only channels you own or joined |
+| `GET` | `/api/channels/<id>/` | membership |
+| `PUT` `PATCH` | `/api/channels/<id>/` | `can_edit_channel` |
+| `DELETE` | `/api/channels/<id>/` | `can_delete_channel` |
+| `GET` `POST` | `/api/channels/<id>/topics/` | membership / `can_create_topic` |
+| `GET` `PATCH` `DELETE` | `/api/channels/<id>/topics/<topic_id>/` | membership / `can_edit_channel` |
+| `GET` `POST` | `/api/channels/<id>/members/` | membership / `can_add_member` |
+| `DELETE` | `/api/channels/<id>/members/<user_id>/` | `can_remove_member` |
+
+Adding a member also honours the **target's** `allow_invites` flag: with it off the
+add is a 403 and no row is written, whatever the actor holds (SH.2).
+
+Deleting a channel or a topic cascades, so both answer **200 with what went with
+it** rather than a silent 204 — `{"deleted_messages": 3}` for a topic,
+`{"deleted": {"topics": …, "members": …, "roles": …, "messages": …}}` for a channel.
+
+Messages inside a topic are `messaging`'s: `GET /api/messages/?topic_id=<id>` and
+`POST /api/messages/` with a `topic`. There is deliberately no message endpoint
+nested under a channel. `backend/channels_app/README.md` is the detail.
 
 ### Messages
 
