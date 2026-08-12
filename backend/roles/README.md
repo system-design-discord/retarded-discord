@@ -68,7 +68,9 @@ The rules, in the order they are applied:
    returning `False` — a typo should not look like a denial.
 
 `common/permissions.py` wraps the service for DRF, so a view declares what it
-needs instead of writing an `if`:
+needs instead of writing an `if`, and `common/mixins.py` carries the
+`ChannelScopedMixin` that resolves the channel in the URL — both are shared with
+`channels_app`, which puts a channel id in four more paths:
 
 ```python
 class ChannelDeleteView(DestroyAPIView):
@@ -90,6 +92,10 @@ last, which needs only membership.
 | `GET` `PATCH` `DELETE` | `/api/channels/<channel_id>/roles/<id>/` | Read, rename, re-grant or delete one (US-4.2) |
 | `GET` `PUT` `PATCH` | `/api/channels/<channel_id>/members/<user_id>/role/` | Assign or clear a member's role (US-4.9) |
 | `GET` | `/api/channels/<channel_id>/me/permissions/` | What the caller may do here (US-8.3) |
+
+The channel itself, its topics and its membership are `channels_app`'s —
+`backend/channels_app/README.md`. Its `urls.py` is included first and its
+patterns do not overlap the four above; a test pins that.
 
 **US-8.2 is a real check, not decoration.** *"…assign various capabilities that
 fall within my own permissions…"* — so a super-admin cannot create a role
@@ -122,8 +128,9 @@ real-time gateway subscribe to it; this module does not import them.
 
 ## Status
 
-`R-01`, `R-04`, `R-02`, `R-03` and `R-05` are done. **`messaging/` no longer
-decides anything for itself**, which was the last violation of
+`R-01`, `R-04`, `R-02`, `R-03` and `R-05` are done, and `channels_app` was
+built on top of them without adding a single inline owner check. **`messaging/`
+no longer decides anything for itself**, which was the last violation of
 architecture.tex §5.1 in the codebase. `F-06` — the role management UI — is the
 one card left in this chain; it reads `me/permissions/` to decide which controls
 to show, and `INT-2`'s matrix deliberately bypasses that UI to prove the server
