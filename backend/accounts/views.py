@@ -4,6 +4,8 @@ from rest_framework import generics, permissions, status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Profile
 from .serializers import (
@@ -20,6 +22,41 @@ class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     permission_classes = [AllowAny]
     serializer_class = RegisterSerializer
+
+
+class LogoutView(APIView):
+    """US-1.3 — log out for real.
+
+    Dropping the token from `localStorage` is not logging out: the refresh token
+    stays valid for its full seven days, so anybody who copied it still has an
+    account. Blacklisting it server-side is what makes the logout mean something,
+    and `SIMPLE_JWT` is already configured for it — `ROTATE_REFRESH_TOKENS` with
+    `BLACKLIST_AFTER_ROTATION`, and `token_blacklist` installed.
+
+    The access token is not revoked, and cannot be: it is stateless and short
+    enough that checking a blacklist on every request would cost a query per
+    call to save at most one day of exposure. The client clears it.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        token = request.data.get('refresh')
+        if not token:
+            return Response(
+                {"error": "توکن تازه‌سازی الزامی است."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            RefreshToken(token).blacklist()
+        except TokenError:
+            # Already blacklisted, expired, or not a token at all. Logging out
+            # twice is not an error the caller can act on, and the state they
+            # asked for — this token no longer works — holds either way, so it
+            # answers the same as the first call.
+            pass
+
+        return Response(status=status.HTTP_205_RESET_CONTENT)
 
 
 class MeView(generics.RetrieveAPIView):

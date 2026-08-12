@@ -35,10 +35,24 @@ export const AuthProvider = ({ children }) => {
         return response.data;
     };
 
-    const logout = () => {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        setUser(null);
+    // US-1.3 — tell the server first, then forget the tokens locally. Dropping
+    // them from localStorage alone leaves the refresh token valid for its full
+    // seven days; auth/logout/ blacklists it. The local half runs either way,
+    // because a user who pressed Log Out must end up logged out even if the
+    // request fails.
+    const logout = async () => {
+        const refresh = localStorage.getItem('refresh_token');
+        try {
+            if (refresh) {
+                await api.post('auth/logout/', { refresh });
+            }
+        } catch {
+            // Already expired or already blacklisted — nothing the user can act on.
+        } finally {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            setUser(null);
+        }
     };
 
     return (
