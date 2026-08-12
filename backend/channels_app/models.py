@@ -6,10 +6,10 @@ and the roles chain could not start until a `Channel` existed to point at.
 `Topic` came in with `R-05`, because message deletion in a channel cannot be
 demonstrated — or even reached — without a channel message to delete.
 
-`C-01` is still open and still owns the sweep of this module against `ERD.tex`.
-`C-02`, `C-03` and `C-04` own the API; there are deliberately no views or
-serializers in this package yet, and `Topic` deliberately has no
-`can_create_topic` gate, which is `C-03`'s to write.
+`C-02`, `C-03` and `C-04` landed the API over the top of them, and `C-01`'s
+remainder — the sweep of this module against `ERD.tex` — is pinned as
+`tests/test_erd_alignment.py` so a later change that drifts fails CI rather than
+being found at `INT-3`.
 
 One deviation from `ERD.tex` is recorded in execution-plan.md: the ERD gives
 `ChannelMember` a composite `(user_id, channel_id)` primary key. We express that
@@ -22,6 +22,24 @@ from django.contrib.auth import get_user_model
 from django.db import models
 
 User = get_user_model()
+
+
+class ChannelManager(models.Manager):
+
+    def create_with_owner(self, owner, **fields):
+        """Create a channel together with its owner's membership.
+
+        `ERD.tex` makes `Channel : ChannelMember` a `1 : 1..N` relationship — a
+        channel with no members is not a valid channel, and its owner is always
+        one of them. Doing both writes in one place removes the standing trap of
+        creating a channel and forgetting the row that puts its creator in it.
+
+        The mirror of `groups_app.models.GroupManager.create_with_admin`, and
+        deliberately the same shape.
+        """
+        channel = self.create(owner=owner, **fields)
+        ChannelMember.objects.create(channel=channel, user=owner)
+        return channel
 
 
 class Channel(models.Model):
@@ -39,6 +57,8 @@ class Channel(models.Model):
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات کانال")
     avatar = models.ImageField(upload_to='channel_avatars/', blank=True, null=True, verbose_name="تصویر کانال")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
+
+    objects = ChannelManager()
 
     class Meta:
         ordering = ['-created_at']
