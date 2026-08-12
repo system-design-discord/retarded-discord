@@ -12,15 +12,21 @@ a second message endpoint nested under a channel would be a fourth definition
 of "messages this user may see".
 """
 
+from django.contrib.auth import get_user_model
 from django.db.models import Q
-from rest_framework import generics, permissions
+from django.shortcuts import get_object_or_404
+from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 
+from accounts.models import Profile
+from common import events
 from common.mixins import ChannelScopedMixin
 from common.permissions import HasChannelPermission, IsChannelMember
 
-from .models import Channel, Topic
-from .serializers import ChannelSerializer, TopicSerializer
+from .models import Channel, ChannelMember, Topic
+from .serializers import ChannelMemberSerializer, ChannelSerializer, TopicSerializer
+
+User = get_user_model()
 
 
 def _deletion_report(deleted_per_model):
@@ -170,3 +176,97 @@ class TopicDetailView(ChannelScopedMixin, generics.RetrieveUpdateDestroyAPIView)
         """
         _, deleted_per_model = self.get_object().delete()
         return Response({'deleted_messages': _deletion_report(deleted_per_model)['messages']})
+
+
+class ChannelMemberListCreateView(ChannelScopedMixin, generics.ListCreateAPIView):
+    """US-4.4 and SH.1 — add a member to a channel directly.
+
+    SH.1 records the team's decision to add users straight in rather than
+    through an invite link, and **SH.2 is the other half of that decision**: the
+    target's own `allow_invites` flag can refuse it. Both have to be real, so
+    the flag is checked here on the write path, not only rendered in a settings
+    screen — exactly as `groups_app` does for US-5.4.
+    """
+
+    serializer_class = ChannelMemberSerializer
+    required_permission = 'can_add_member'
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [permissions.IsAuthenticated(), HasChannelPermission()]
+        return [permissions.IsAuthenticated(), IsChannelMember()]
+
+    def get_queryset(self):
+        return (
+            ChannelMember.objects
+            .filter(channel=self.get_channel())
+            .select_related('user', 'role', 'channel')
+        )
+
+    def create(self, request, *args, **kwargs):
+        channel = self.get_channel()
+
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return Response({'user_id': "شناسه کاربر الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
+
+        target = get_object_or_404(User, pk=user_id)
+
+        if ChannelMember.objects.filter(channel=channel, user=target).exists():
+            return Response(
+                {'error': f"کاربر {target.username} از قبل عضو این کانال است."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # SH.2 / US-5.4 — the target's own flag decides, not the actor's rank.
+        profile, _ = Profile.objects.get_or_create(user=target)
+        if not profile.allow_invites:
+            return Response(
+                {'error': f"کاربر {target.username} اجازه اضافه شدن به کانال‌ها را بسته است."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        membership = ChannelMember.objects.create(channel=channel, user=target)
+
+        # Notifications and the real-time gateway subscribe to this rather than
+        # being imported here (architecture.tex §5.1, common/events.py).
+        events.publish(
+            events.MEMBER_ADDED,
+            channel=channel,
+            user=target,
+            actor=request.user,
+        )
+
+        return Response(
+            self.get_serializer(membership).data, status=status.HTTP_201_CREATED
+        )
+
+
+class ChannelMemberDetailView(ChannelScopedMixin, generics.DestroyAPIView):
+    """US-4.3 — remove a member from the channel.
+
+    The owner cannot be removed: `ERD.tex` makes `Channel : ChannelMember` a
+    `1 : 1..N` relationship, and removing the one member who implicitly holds
+    every permission would leave a channel nobody can administer.
+    """
+
+    serializer_class = ChannelMemberSerializer
+    permission_classes = [permissions.IsAuthenticated, HasChannelPermission]
+    required_permission = 'can_remove_member'
+
+    def get_object(self):
+        return get_object_or_404(
+            ChannelMember, channel=self.get_channel(), user_id=self.kwargs['user_id']
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        membership = self.get_object()
+
+        if membership.channel.owner_id == membership.user_id:
+            return Response(
+                {'error': "امکان حذف مالک کانال وجود ندارد."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        membership.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
