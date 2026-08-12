@@ -22,8 +22,7 @@ deviation is recorded in `../../execution-plan.md`.
 
 ## What you may read — `Message.objects.visible_to(user)`
 
-One queryset, used by the list view, the detail view and (when `M-08` lands) the
-search endpoint. Before it existed each caller had its own version and they did
+One queryset, used by the list view, the detail view and the search endpoint. Before it existed each caller had its own version and they did
 not agree: the detail view scoped to `sender`, so a direct message you *received*
 was unreadable over the API, and a moderator could not reach a message in order
 to delete it.
@@ -47,7 +46,21 @@ includes this one. There is no `if` about authorship or ownership anywhere in
 |---|---|
 | Post in a group | `roles.services.require_group_membership` |
 | Post in a topic | `roles.services.require_channel_membership` |
+| Edit a message | `roles.services.require_edit_message` |
 | Delete a message | `roles.services.require_delete_message` |
+
+**Editing and deleting are deliberately opposite shapes.** A channel owner, a
+group admin and a holder of `can_delete_message` may all *remove* somebody
+else's message; none of them may *change* one. US-3.2 — *"only and exclusively
+myself"* — makes editing the author's alone in every context. Moderation is
+deleting somebody's words, not putting different ones in their mouth. An edit
+sets `is_edited` and `edited_at`; `created_at` is `auto_now_add`, so the
+original timestamp survives by construction.
+
+A `PATCH` reads through `MessageEditSerializer`, which exposes exactly one
+writable field. Editing through the full serializer would leave `recipient`,
+`group` and `topic` writable, so a `PATCH` could move somebody's message into a
+different conversation while keeping its author and timestamp.
 
 All members of a channel may post in its topics without any role at all —
 `user_stories_en.tex` §Assumptions for section 4 is explicit that a channel is a
@@ -75,3 +88,41 @@ Attaching media means uploading to `/api/media/upload/` first, then passing
 `M-06` owns editing and the `is_edited` flag, `M-08` the full-text search over
 this module's rows, and `SC-02` the `scheduled_at` field. `ERD.tex` also gives
 `Message` an `updated_at` and an `is_delivered`, which arrive with those cards.
+
+## Search — `GET /api/messages/search/?q=`
+
+US-9.1, over PostgreSQL full-text with a GIN index. `architecture.tex` chose
+that over standing up a second datastore, so there is no Elasticsearch here and
+there should not be one.
+
+```python
+Message.objects.visible_to(user).search(term)
+```
+
+**The scoping is the composition, not a second filter.** `search()` ranks
+whatever queryset it is called on and scopes nothing itself, which is what makes
+the acceptance criterion — a term appearing only in a stranger's conversation
+returns zero results — true by construction rather than by a rule somebody has
+to keep in step with the list view.
+
+Two details that will bite whoever changes this next:
+
+* The text search **configuration is `simple`**, not `english`. Message text
+  here is mixed Persian and English, and an English stemmer would quietly mangle
+  one of the two. It is `SEARCH_CONFIG` in `models.py`, used by both the index
+  and the query, and **they must stay identical** — a mismatch does not error,
+  it silently stops using the index.
+* The index is an **expression** index over the same `SearchVector`
+  (`message_text_search`), so there is no denormalised column to keep up to date
+  and the model keeps the exact shape `ERD.tex` gives it.
+
+A blank `q` returns nothing rather than the caller's whole history. Results
+carry a `conversation` object — `{kind, id, name}`, where `kind` is `dm`,
+`group` or `topic` — because in a list of hits spanning three kinds of
+conversation, "where was this said" is the question the user actually has.
+
+## Events
+
+Creating a message publishes `common.events.MESSAGE_CREATED`. `notifications`
+subscribes; this module does not import it, and
+`notifications/tests/test_generation.py` asserts that it never starts to.

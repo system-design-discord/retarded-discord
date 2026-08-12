@@ -52,6 +52,8 @@ The channel owner implicitly holds all eight.
 | `require_group_permission(user, group, permission)` | The same, but raises |
 | `may_delete_message(user, message)` | `R-05` — the message's context picks which rule above applies |
 | `require_delete_message(user, message)` | The same, but raises |
+| `may_edit_message(user, message)` | `M-06` — the author, and nobody else, in any context |
+| `require_edit_message(user, message)` | The same, but raises |
 
 Every answer is read from database rows at call time. Nothing is cached, so an
 admin reassigning a role takes effect on the caller's **very next request** —
@@ -123,12 +125,28 @@ A message the caller cannot *see* returns **404**, not 403: refusing with 403
 would confirm that a conversation they are not in exists. Visibility is
 `messaging.Message.objects.visible_to`, which is membership, not permission.
 
+## Editing a message
+
+The mirror image, and worth stating next to the table above so the asymmetry is
+not read as an oversight. Every row that may **delete** somebody else's message
+may not **edit** it:
+
+| Context | Who may edit | Stories |
+|---|---|---|
+| Any | the author, and nobody else at all | US-3.1, US-3.2 |
+
+US-3.2 is unusually exact — *"I want only and exclusively myself to be able to
+edit my own sent message, so that no one can distort my message"* — so a channel
+owner, a group admin and a holder of `can_delete_message` all get 403 from
+`may_edit_message`. That the rule is one line is not a reason to move the
+decision back into `messaging`.
+
 Assigning a role publishes `common.events.ROLE_CHANGED`. Notifications and the
 real-time gateway subscribe to it; this module does not import them.
 
 ## Status
 
-`R-01`, `R-04`, `R-02`, `R-03` and `R-05` are done, and `channels_app` was
+`R-01`, `R-04`, `R-02`, `R-03`, `R-05` and `M-06`'s decision are done, and `channels_app` was
 built on top of them without adding a single inline owner check. **`messaging/`
 no longer decides anything for itself**, which was the last violation of
 architecture.tex §5.1 in the codebase. `F-06` — the role management UI — is the
