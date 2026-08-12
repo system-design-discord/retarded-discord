@@ -17,6 +17,38 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
 
+class PublicUserSerializer(serializers.ModelSerializer):
+    """A user as a stranger may see them — US-10.2.
+
+    `UserSerializer` above carries `email`, which is correct where the caller is
+    reading their own account or a conversation they are in. This one is the
+    shape for anybody else, and it is a **separate class rather than an
+    `exclude`**: excluding is how a private field creeps back in the next time
+    somebody adds one to the model.
+    """
+
+    class Meta:
+        model = User
+        fields = ['id', 'username']
+        read_only_fields = ['id', 'username']
+
+
+class PublicProfileSerializer(serializers.ModelSerializer):
+    """Another user's profile — display fields only.
+
+    Never `email` (theirs to give out, not ours), never `allow_invites` (a
+    privacy setting, and knowing it in advance is exactly what SH.2 refuses to
+    let an inviter do), and never anything from the auth tables.
+    """
+
+    user = PublicUserSerializer(read_only=True)
+
+    class Meta:
+        model = Profile
+        fields = ['user', 'bio', 'avatar']
+        read_only_fields = fields
+
+
 class ProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     email = serializers.EmailField(source='user.email', required=False)
