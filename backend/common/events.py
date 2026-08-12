@@ -23,7 +23,15 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
-# The three events US-11.1 names, plus the one the real-time gateway needs.
+# The three events US-11.1 names. Their payloads are part of the contract — a
+# subscriber written against them must keep working when a second publisher
+# appears, which is exactly what happened to MEMBER_ADDED.
+#
+# | Event           | Payload                                        | Published by            |
+# |-----------------|------------------------------------------------|-------------------------|
+# | MESSAGE_CREATED | message                                        | messaging               |
+# | MEMBER_ADDED    | user, actor, and one of channel= or group=     | channels_app, groups_app|
+# | ROLE_CHANGED    | channel, user, role, actor                     | roles                   |
 MESSAGE_CREATED = 'message.created'
 MEMBER_ADDED = 'member.added'
 ROLE_CHANGED = 'role.changed'

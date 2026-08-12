@@ -12,6 +12,7 @@ from django.db.models import Q
 from django.utils import timezone
 from rest_framework import generics, permissions
 
+from common import events
 from media_app.models import MediaFile
 from roles import services as roles
 
@@ -68,7 +69,13 @@ class MessageListCreateView(generics.ListCreateAPIView):
 
         media_id = serializer.validated_data.pop('media_id', None)
         media_obj = MediaFile.objects.filter(id=media_id, user=self.request.user).first() if media_id else None
-        serializer.save(sender=self.request.user, media=media_obj)
+        message = serializer.save(sender=self.request.user, media=media_obj)
+
+        # Notifications and the real-time gateway subscribe to this rather than
+        # being imported here (architecture.tex §5.1, common/events.py). A
+        # handler that raises is logged and skipped, so a failed notification
+        # can never fail the message that triggered it.
+        events.publish(events.MESSAGE_CREATED, message=message)
 
 
 class MessageDetailView(generics.RetrieveUpdateDestroyAPIView):

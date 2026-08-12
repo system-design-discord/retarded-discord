@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import Profile
+from common import events
 from roles import services as roles
 
 from .models import Group, GroupMember
@@ -82,6 +83,18 @@ class GroupAddRemoveMemberView(APIView):
                 )
 
             group.members.add(target_user)
+
+            # The same event channels_app publishes when a channel gains a
+            # member. US-11.1 names being added to a *group or channel*, so both
+            # sides have to say so; notifications subscribes, and this module
+            # does not import it (architecture.tex §5.1).
+            events.publish(
+                events.MEMBER_ADDED,
+                group=group,
+                user=target_user,
+                actor=request.user,
+            )
+
             return Response({"message": f"کاربر {target_user.username} به گروه اضافه شد."}, status=status.HTTP_200_OK)
         elif action == 'remove':
             if target_user == group.admin:
