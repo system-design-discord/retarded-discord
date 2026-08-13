@@ -9,6 +9,8 @@ import ViewProfile from './components/profile/ViewProfile';
 import GroupChat from './components/groups/GroupChat';
 import DirectMessages from './components/dms/DirectMessages';
 import ChannelsDashboard from './components/channels/ChannelsDashboard';
+import ChannelPicker from './components/channels/ChannelPicker';
+import RoleManager from './components/channels/RoleManager';
 import GroupsDashboard from './components/groups/GroupsDashboard';
 import Dashboard from './components/dashboard/Dashboard';
 import SearchMessages from './components/search/SearchMessages';
@@ -51,6 +53,11 @@ function App() {
         <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
         <Route path="/dms" element={<PrivateRoute><DirectMessages /></PrivateRoute>} />
         <Route path="/channels" element={<PrivateRoute><ChannelsDashboard /></PrivateRoute>} />
+        {/* F-06 — the role manager is its own route rather than a modal on the
+            dashboard above, which is F-04/F-05's file. The picker exists so the
+            screen is reachable until F-04 links to it. */}
+        <Route path="/channels/roles" element={<PrivateRoute><ChannelPicker /></PrivateRoute>} />
+        <Route path="/channels/:channelId/roles" element={<PrivateRoute><RoleManager /></PrivateRoute>} />
         <Route path="/groups" element={<PrivateRoute><GroupsDashboard /></PrivateRoute>} />
         {/* Both paths open the same view. SearchMessages links group hits at
             /chat/<group_id>, and the groups dashboard opens the nested one. */}
