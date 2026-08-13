@@ -144,7 +144,13 @@ export default function DirectMessages() {
     <div className="min-h-screen h-screen bg-slate-950 text-slate-100 flex">
       <NavSidebar active="/dms" />
 
-      <aside className="w-72 shrink-0 bg-slate-900/60 border-r border-slate-800/80 p-4 flex flex-col gap-4 overflow-y-auto">
+      {/* Below md the list and the conversation take turns: three panes in
+          390px leaves the composer 70px, which is not a layout. */}
+      <aside
+        className={`w-full md:w-72 shrink-0 bg-slate-900/60 border-r border-slate-800/80 p-3 md:p-4 flex-col gap-4 overflow-y-auto ${
+          active ? 'hidden md:flex' : 'flex'
+        }`}
+      >
         <div>
           <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-3">
             Direct Messages
@@ -228,12 +234,21 @@ export default function DirectMessages() {
           id={active.id}
           title={active.username}
           subtitle="Direct message"
+          headerExtra={
+            <button
+              type="button"
+              onClick={() => setSearchParams({})}
+              className="md:hidden text-xs text-slate-400 hover:text-slate-200 cursor-pointer shrink-0"
+            >
+              ← All
+            </button>
+          }
           placeholder={`Message ${active.username}…`}
           emptyTitle="No messages yet"
           emptyHint={`Say something to ${active.username}.`}
         />
       ) : (
-        <div className="flex-1 bg-slate-900 flex items-center justify-center">
+        <div className="flex-1 bg-slate-900 hidden md:flex items-center justify-center">
           <EmptyState
             title="Select a conversation"
             hint="Pick someone on the left, or search for a user to start a new conversation."
