@@ -9,3 +9,16 @@ class RealtimeConfig(AppConfig):
     """
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'realtime'
+
+    def ready(self):
+        """Subscribe once, at startup.
+
+        The import is inside `ready()` because `publisher` reaches the message
+        serializer, and an app config runs before the registry is populated —
+        the same reason `notifications/apps.py` does it this way.
+        """
+        from common import events
+
+        from . import publisher
+
+        events.subscribe(events.MESSAGE_CREATED, publisher.on_message_created)
