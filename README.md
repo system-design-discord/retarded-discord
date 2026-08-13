@@ -216,6 +216,25 @@ Who may delete one is `roles.services.may_delete_message`, and it depends on whe
 
 `backend/messaging/README.md` is the detail.
 
+### Real time
+
+**Bonus, server side only.** `RT-01` put the channel layer on Redis and `RT-02` replaced the
+WebSocket consumer, which used to take the sender's identity from the client's JSON payload — so
+anyone could post as anyone — and wrote straight to the database, bypassing every check the REST
+path makes.
+
+    ws://<host>/ws/dm/<user_id>/?token=<access>
+    ws://<host>/ws/group/<group_id>/?token=<access>
+    ws://<host>/ws/topic/<topic_id>/?token=<access>
+
+The socket is **delivery only**: messages are written with `POST /api/messages/` and pushed from
+`common.events.MESSAGE_CREATED`, so there is still exactly one write path. Identity is the JWT's,
+membership is `roles.services`' answer, and a refusal is `4401` (no/bad token), `4403` (not in this
+conversation) or `4404` (no such conversation).
+
+**Nothing in the SPA opens one yet** — `F-07`, the client, was cut at the Aug 11 bonus gate, so new
+messages still arrive by a five-second poll. `backend/realtime/README.md` is the detail.
+
 ### The chat surface
 
 Direct messages, groups and channel topics are the same UI with a different target, rendered through
