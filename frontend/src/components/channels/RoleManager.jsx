@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import useChannelPermissions from '../../hooks/useChannelPermissions';
 import useChannelRoles from '../../hooks/useChannelRoles';
 import { PERMISSIONS, PERMISSION_KEYS } from '../../lib/permissions';
-import { getChannel } from '../../services/roles';
+import { getChannel } from '../../services/channels';
 import NavSidebar from '../layout/NavSidebar';
 import { EmptyState } from '../chat/primitives';
 

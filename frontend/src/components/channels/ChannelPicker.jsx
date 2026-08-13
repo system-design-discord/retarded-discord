@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { listChannels } from '../../services/roles';
+import { listChannels } from '../../services/channels';
 import NavSidebar from '../layout/NavSidebar';
 import { EmptyState } from '../chat/primitives';
 
