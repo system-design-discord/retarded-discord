@@ -174,11 +174,35 @@ SIMPLE_JWT = {
 }
 
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
+# RT-01. The channel layer is what carries a group_send from the process that
+# published it to every process holding a subscribed socket. InMemoryChannelLayer
+# does not cross a process boundary, so with more than one worker a message
+# reaches only the clients that happen to share the sender's process — which
+# looks like intermittent delivery rather than a missing dependency.
+#
+# Redis when REDIS_URL is set, in-memory when it is not. The fallback is not a
+# convenience: `pytest` runs without the compose stack and a clone that has not
+# read the README still has to boot. Anything relying on cross-process fan-out
+# has to say so — see realtime/tests/test_channel_layer.py.
+REDIS_URL = os.environ.get('REDIS_URL', '')
+
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [REDIS_URL],
+                # A group is one conversation. The default 24h expiry outlives
+                # any socket that would read it, and a stale group is a slow
+                # leak rather than an error, so it is shortened deliberately.
+                'group_expiry': 3600,
+            },
+        }
     }
-}
+else:
+    CHANNEL_LAYERS = {
+        'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}
+    }
 
 
 # In the container stack nginx puts the SPA and the API on one origin, so CORS
