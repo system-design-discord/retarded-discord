@@ -8,6 +8,11 @@ djangorestframework-simplejwt==5.5.1
 # ASGI: the /ws gateway needs Channels, and daphne is the ASGI server.
 channels[daphne]==4.3.2
 
+# The channel layer behind the /ws gateway. InMemoryChannelLayer only fans out
+# within one process, which is not a channel layer so much as the absence of
+# one — see config/settings.py CHANNEL_LAYERS.
+channels-redis==4.3.0
+
 # PostgreSQL driver. US-9.1 full-text search needs Postgres, not SQLite.
 psycopg[binary]==3.3.4
 
