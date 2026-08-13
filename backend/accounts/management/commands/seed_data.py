@@ -14,9 +14,11 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from accounts.models import Profile
+from channels_app.models import Channel, ChannelMember, Topic
 from groups_app.models import Group, GroupMember
 from media_app.models import MediaFile
 from messaging.models import Message
+from roles.models import Role
 
 User = get_user_model()
 
@@ -29,6 +31,23 @@ USERS = [
 ]
 
 GROUP_NAME = 'گروه تست برنامه‌نویسان'
+
+CHANNEL_NAME = 'کانال تحلیل و طراحی سیستم‌ها'
+CHANNEL_DESCRIPTION = 'کانال نمونه برای نمایش تاپیک‌ها، نقش‌ها و دسترسی‌ها'
+
+# Two topics, because one cannot demonstrate that a channel is a *collection*
+# of topics (US-4.5) and F-05's tab list has nothing to switch between.
+TOPIC_NAMES = ('عمومی', 'معماری')
+
+# One role holding some of the eight permissions and not others. That asymmetry
+# is the point: INT-2 needs an allowed case and a denied case for the same
+# member, and a role that grants everything demonstrates neither.
+ROLE_NAME = 'ناظر'
+ROLE_PERMISSIONS = {
+    'can_create_topic': True,
+    'can_delete_message': True,
+    'can_send_media': False,
+}
 
 # A one-pixel GIF. The name ends in .jpg so MediaFile.save() files it as an
 # image; the bytes are a GIF because that is the shortest valid image there is.
@@ -65,10 +84,20 @@ class Command(BaseCommand):
         media = self._seed_media(owner=majid)
         self._seed_messages(majid=majid, amirm=amirm, group=group, media=media)
 
+        channel = self._seed_channel(owner=majid, members=[amirm, arvin])
+        topics = self._seed_topics(channel)
+        self._seed_role(channel=channel, holder=amirm)
+        self._seed_topic_messages(topic=topics[0], majid=majid, amirm=amirm)
+
         self.stdout.write(self.style.SUCCESS('داده‌های اولیه با موفقیت در دیتابیس ذخیره شدند!'))
         self.stdout.write(
             f"ورود با نام کاربری {', '.join(u['username'] for u in USERS)} "
             f"و رمز عبور {DEMO_PASSWORD}"
+        )
+        self.stdout.write(
+            f"کانال نمونه: «{channel.name}» — مالک {channel.owner.username} "
+            f"(هر هشت دسترسی)، {amirm.username} با نقش «{ROLE_NAME}»، "
+            f"{arvin.username} بدون نقش"
         )
 
     def _seed_users(self, keep_passwords):
@@ -142,6 +171,73 @@ class Command(BaseCommand):
             file=SimpleUploadedFile(
                 name='seed_architecture.jpg', content=DUMMY_IMAGE, content_type='image/jpeg'
             ),
+        )
+
+    def _seed_channel(self, owner, members):
+        """One channel owned by `owner`, containing everybody.
+
+        `create_with_owner` is channels_app's own constructor — it writes the
+        owner's ChannelMember row in the same call, because ERD.tex makes
+        Channel : ChannelMember a 1 : 1..N relationship and a channel with no
+        members is not a valid channel. The mirror of `_seed_group` above.
+        """
+        channel = Channel.objects.filter(name=CHANNEL_NAME).first()
+        if channel is None:
+            channel = Channel.objects.create_with_owner(
+                owner=owner, name=CHANNEL_NAME, description=CHANNEL_DESCRIPTION
+            )
+
+        for member in members:
+            ChannelMember.objects.get_or_create(channel=channel, user=member)
+
+        self.stdout.write(f"  کانال {channel.name}: {len(members) + 1} عضو")
+        return channel
+
+    def _seed_topics(self, channel):
+        """The channel's topics, keyed on (channel, name) — its uniqueness rule."""
+        topics = []
+
+        for name in TOPIC_NAMES:
+            topic, _ = Topic.objects.get_or_create(channel=channel, name=name)
+            topics.append(topic)
+
+        return topics
+
+    def _seed_role(self, channel, holder):
+        """One partially-privileged role, held by `holder`.
+
+        Seeded so that INT-2's sixteen-check matrix has something to run
+        against without any manual setup: the owner implicitly holds all eight,
+        `holder` holds the three in ROLE_PERMISSIONS and is refused the rest,
+        and the remaining member holds nothing at all. Allowed case, denied
+        case and no-role case, from one command.
+
+        The permissions are re-applied on every run rather than only at
+        creation, so editing ROLE_PERMISSIONS here changes what a re-seeded
+        database actually grants.
+        """
+        role, _ = Role.objects.get_or_create(channel=channel, name=ROLE_NAME)
+
+        for permission, granted in ROLE_PERMISSIONS.items():
+            setattr(role, permission, granted)
+        role.save(update_fields=list(ROLE_PERMISSIONS))
+
+        ChannelMember.objects.filter(channel=channel, user=holder).update(role=role)
+        self.stdout.write(f"  نقش {role.name}: به {holder.username} داده شد")
+
+        return role
+
+    def _seed_topic_messages(self, topic, majid, amirm):
+        """Two messages in a topic, so the channel surface is not empty.
+
+        Keyed the same way as the direct and group messages below — on sender,
+        target and text — so a re-run matches rather than stacking a copy.
+        """
+        Message.objects.get_or_create(
+            sender=majid, topic=topic, text="این تاپیک برای بحث‌های عمومی کانال است."
+        )
+        Message.objects.get_or_create(
+            sender=amirm, topic=topic, text="عالیه! پس سوالای فرانت‌اند رو اینجا می‌پرسم."
         )
 
     def _seed_messages(self, majid, amirm, group, media):

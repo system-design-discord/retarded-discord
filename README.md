@@ -19,6 +19,11 @@ docker compose up --build
 Open **http://localhost:8080**. Sign in as `majid`, `amirm` or `arvin`, password `testpass123`, or
 register a new account.
 
+The seed also builds one channel with two topics and a `ناظر` role that grants `can_create_topic`
+and `can_delete_message` but **not** `can_send_media` — held by `amirm`, while `arvin` holds no role
+and `majid` owns the channel and so implicitly holds all eight. That arrangement is what `INT-2`'s
+permission matrix runs against, and it is pinned by `backend/accounts/tests/test_seed_data.py`.
+
 The demo accounts are seeded by the backend's entrypoint on every start, so those two commands are
 the whole of it. Seeding is idempotent and re-runnable by hand
 (`docker compose exec backend python manage.py seed_data`); set `DJANGO_SEED_DATA=false` in `.env`
