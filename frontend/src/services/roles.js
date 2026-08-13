@@ -1,4 +1,5 @@
 import api from './api';
+import { readApiError } from '../lib/apiError';
 import { fetchAllPages } from '../lib/pagination';
 
 // The one place in the SPA that knows the roles API's shape.
@@ -123,20 +124,7 @@ export function withRoleIds(members, roles) {
 /**
  * The server's complaint, in the shape DRF actually sends it.
  *
- * A permission overreach comes back as `{can_delete_channel: ["..."]}` — keyed
- * by field, Persian, one entry per permission the caller tried to grant beyond
- * their own. A name clash is `{name: ["..."]}`. Flattening loses which field
- * failed, so callers get the field names too.
+ * Kept as a name because `RoleManager.jsx` and `useChannelRoles.js` call it;
+ * the reader itself is `lib/apiError.js`, shared with the channels service.
  */
-export function readRoleError(error, fallback) {
-  const data = error?.response?.data;
-  if (!data) return fallback;
-  if (typeof data === 'string') return data;
-
-  const messages = Object.entries(data).flatMap(([field, value]) => {
-    const texts = Array.isArray(value) ? value : [String(value)];
-    return texts.map((text) => (field === 'detail' || field === 'non_field_errors' ? text : `${field}: ${text}`));
-  });
-
-  return messages.length > 0 ? messages.join('\n') : fallback;
-}
+export const readRoleError = readApiError;
