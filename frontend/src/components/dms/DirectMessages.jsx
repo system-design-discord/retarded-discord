@@ -1,195 +1,260 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
+import { listDirectMessages } from '../../services/messages';
+import { unwrapList } from '../../lib/pagination';
 import { AuthContext } from '../../context/AuthContext';
+import NavSidebar from '../layout/NavSidebar';
+import Chat from '../chat/Chat';
+import { Avatar, EmptyState } from '../chat/primitives';
 
-// Extracting data logic into one place as requested by the card
-const useChatData = (user) => {
+// US-2.1 and US-2.5 in the UI.
+//
+// This screen used to call `dms/` and `dms/<id>/messages/` with `{content}`.
+// None of that exists and none of it will: a direct message is read at
+// `messages/?user_id=<id>` and written at `messages/` with `{recipient, text}`.
+//
+// **There is no conversations endpoint**, so the list on the left is derived:
+// `messages/` with no selector returns everything `Message.objects.visible_to`
+// allows, and the direct messages are the subset carrying a `recipient`. That
+// is a real limitation, not a stand-in — it reads every visible message to
+// build the sidebar. A `conversations/` endpoint is the fix, and it belongs to
+// whoever picks it up, not to this card.
+
+/** Group direct messages into one row per correspondent, newest first. */
+function conversationsFrom(messages, meId) {
+  const byPartner = new Map();
+
+  for (const message of messages) {
+    // `sender` is nested and `recipient` is a bare id — that asymmetry is the
+    // serializer's, and it is why a partner's username is sometimes unknown.
+    const partnerId = message.sender?.id === meId ? message.recipient : message.sender?.id;
+    if (!partnerId || partnerId === meId) continue;
+
+    const known = byPartner.get(partnerId);
+    const username = message.sender?.id === partnerId ? message.sender.username : known?.username;
+
+    if (!known || new Date(message.created_at) >= new Date(known.at)) {
+      byPartner.set(partnerId, {
+        id: partnerId,
+        username: username ?? known?.username ?? null,
+        preview: message.text ?? '',
+        at: message.created_at,
+      });
+    } else if (username && !known.username) {
+      byPartner.set(partnerId, { ...known, username });
+    }
+  }
+
+  return [...byPartner.values()].sort((a, b) => new Date(b.at) - new Date(a.at));
+}
+
+/** Fill in the usernames the message payload could not supply. */
+async function nameMissingPartners(conversations) {
+  const unnamed = conversations.filter((conversation) => !conversation.username);
+  if (unnamed.length === 0) return conversations;
+
+  const names = new Map();
+  await Promise.all(
+    unnamed.map(async ({ id }) => {
+      try {
+        const { data } = await api.get(`profile/${id}/`);
+        names.set(id, data.user?.username ?? `User ${id}`);
+      } catch {
+        names.set(id, `User ${id}`);
+      }
+    }),
+  );
+
+  return conversations.map((conversation) =>
+    conversation.username ? conversation : { ...conversation, username: names.get(conversation.id) },
+  );
+}
+
+export default function DirectMessages() {
+  const { user } = useContext(AuthContext);
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [conversations, setConversations] = useState([]);
-  const [activeChat, setActiveChat] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    const fetchConversations = async () => {
-      try {
-        const response = await api.get('dms/');
-        setConversations(response.data);
-        if (response.data.length > 0) {
-          setActiveChat(response.data[0]);
-        }
-      } catch (error) {
-        console.error("Error fetching conversations:", error);
-      }
-    };
-    fetchConversations();
-  }, []);
+  const [lookup, setLookup] = useState('');
+  const [candidates, setCandidates] = useState([]);
+  const [searching, setSearching] = useState(false);
 
-  useEffect(() => {
-    if (!activeChat) return;
-    const fetchMessages = async () => {
-      setLoading(true);
-      try {
-        const response = await api.get(`dms/${activeChat.id}/messages/`);
-        setMessages(response.data);
-      } catch (error) {
-        console.error("Error fetching messages:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchMessages();
-  }, [activeChat]);
+  // `?user=<id>` is what SearchMessages links a direct-message hit to, so the
+  // deep link and the sidebar selection are the same piece of state.
+  const activeId = Number(searchParams.get('user')) || null;
 
-  const sendMessage = async (content) => {
-    if (!content.trim() || !activeChat) return;
+  const loadConversations = useCallback(async () => {
+    if (!user?.id) return;
     try {
-      const response = await api.post(`dms/${activeChat.id}/messages/`, { content });
-      setMessages(prev => [...prev, response.data]);
-    } catch (error) {
-      console.error("Error sending message:", error);
+      const messages = await listDirectMessages();
+      setConversations(await nameMissingPartners(conversationsFrom(messages, user.id)));
+      setError('');
+    } catch {
+      setError('Your conversations could not be loaded.');
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
+
+  // Land on the most recent conversation when no one is named in the URL.
+  useEffect(() => {
+    if (!activeId && conversations.length > 0) {
+      setSearchParams({ user: String(conversations[0].id) }, { replace: true });
+    }
+  }, [activeId, conversations, setSearchParams]);
+
+  const active = useMemo(() => {
+    const known = conversations.find((conversation) => conversation.id === activeId);
+    if (known) return known;
+    const candidate = candidates.find((person) => person.id === activeId);
+    return activeId ? { id: activeId, username: candidate?.username ?? `User ${activeId}` } : null;
+  }, [conversations, candidates, activeId]);
+
+  const search = async (event) => {
+    event.preventDefault();
+    const term = lookup.trim();
+    if (!term) return;
+
+    setSearching(true);
+    try {
+      setCandidates(unwrapList(await api.get('users/', { params: { search: term } })));
+    } catch {
+      setCandidates([]);
+      setError('The user search could not be completed.');
+    } finally {
+      setSearching(false);
     }
   };
 
-  return { conversations, activeChat, setActiveChat, messages, loading, sendMessage };
-};
-
-const DirectMessages = () => {
-  const { user } = useContext(AuthContext);
-  const [newMessage, setNewMessage] = useState('');
-  
-  // All data fetching is cleanly contained here
-  const { 
-    conversations, 
-    activeChat, 
-    setActiveChat, 
-    messages, 
-    loading, 
-    sendMessage 
-  } = useChatData(user);
-
-  const handleSendMessage = (e) => {
-    e.preventDefault();
-    sendMessage(newMessage);
-    setNewMessage('');
+  const open = (id) => {
+    setSearchParams({ user: String(id) });
+    setCandidates([]);
+    setLookup('');
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex">
-      {/* Navigation Sidebar - Upgraded to Links */}
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-2">
-        <div className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Navigation</div>
-        <Link to="/dashboard" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>🏠</span> Home
-        </Link>
-        <Link to="/dms" className="flex items-center gap-3 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium transition cursor-pointer">
-          <span>💬</span> Direct Messages
-        </Link>
-        <Link to="/groups" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>👥</span> Groups
-        </Link>
-        <Link to="/channels" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>📢</span> Channels
-        </Link>
-        <Link to="/search" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>🔍</span> Search
-        </Link>
-        <Link to="/notifications" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>🔔</span> Notifications
-        </Link>
-        <Link to="/profile" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>👤</span> Profile
-        </Link>
-      </aside>
+    <div className="min-h-screen h-screen bg-slate-950 text-slate-100 flex">
+      <NavSidebar active="/dms" />
 
-      {/* Conversations Sub-Sidebar */}
-      <aside className="w-72 bg-slate-900/60 border-r border-slate-800/80 p-4 flex flex-col">
-        <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-4">Direct Messages</h3>
+      {/* Below md the list and the conversation take turns: three panes in
+          390px leaves the composer 70px, which is not a layout. */}
+      <aside
+        className={`w-full md:w-72 shrink-0 bg-slate-900/60 border-r border-slate-800/80 p-3 md:p-4 flex-col gap-4 overflow-y-auto ${
+          active ? 'hidden md:flex' : 'flex'
+        }`}
+      >
+        <div>
+          <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-3">
+            Direct Messages
+          </h3>
+
+          <form onSubmit={search} className="flex gap-2">
+            <input
+              type="text"
+              value={lookup}
+              placeholder="Find someone…"
+              onChange={(event) => setLookup(event.target.value)}
+              className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+            />
+            <button
+              type="submit"
+              disabled={searching || !lookup.trim()}
+              className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-semibold cursor-pointer"
+            >
+              {searching ? '…' : 'Go'}
+            </button>
+          </form>
+        </div>
+
+        {candidates.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[11px] uppercase tracking-wider text-slate-600 px-1">Start a conversation</div>
+            {candidates.map((person) => (
+              <button
+                key={person.id}
+                type="button"
+                onClick={() => open(person.id)}
+                className="w-full text-left p-2.5 rounded-xl hover:bg-slate-800/60 flex items-center gap-3 cursor-pointer"
+              >
+                <Avatar name={person.username} size="sm" />
+                <span className="text-sm truncate">{person.username}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {error && (
+          <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-900/60 text-rose-300 text-[11px]">
+            {error}
+          </div>
+        )}
+
         <div className="space-y-1">
-          {conversations.length > 0 ? (
-            conversations.map(conv => (
-              <div
-                key={conv.id}
-                onClick={() => setActiveChat(conv)}
-                className={`p-3 rounded-xl transition cursor-pointer flex items-center gap-3 ${
-                  activeChat?.id === conv.id ? 'bg-indigo-600/20 border border-indigo-500/30 text-white' : 'hover:bg-slate-800/50 text-slate-300'
+          {loading ? (
+            <div className="text-xs text-slate-500 p-2">Loading…</div>
+          ) : conversations.length === 0 ? (
+            <div className="text-xs text-slate-500 p-2">
+              No conversations yet. Find someone above to start one.
+            </div>
+          ) : (
+            conversations.map((conversation) => (
+              <button
+                key={conversation.id}
+                type="button"
+                onClick={() => open(conversation.id)}
+                className={`w-full text-left p-3 rounded-xl transition cursor-pointer flex items-center gap-3 ${
+                  conversation.id === activeId
+                    ? 'bg-indigo-600/20 border border-indigo-500/30 text-white'
+                    : 'hover:bg-slate-800/50 text-slate-300'
                 }`}
               >
-                <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-sm text-indigo-400">
-                  {conv.userName ? conv.userName[0] : 'U'}
+                <Avatar name={conversation.username} />
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm truncate">{conversation.username}</div>
+                  <div className="text-xs text-slate-500 truncate mt-0.5">{conversation.preview}</div>
                 </div>
-                <div className="flex-1 overflow-hidden">
-                  <div className="font-bold text-sm truncate">{conv.userName || conv.receiver_username}</div>
-                  <div className="text-xs text-slate-500 truncate flex items-center gap-1 mt-0.5">
-                    <span className={`w-1.5 h-1.5 rounded-full ${conv.isOnline ? 'bg-emerald-400' : 'bg-slate-600'}`}></span>
-                    {conv.isOnline ? 'Online' : 'Offline'}
-                  </div>
-                </div>
-              </div>
+              </button>
             ))
-          ) : (
-            <div className="text-xs text-slate-500 p-2">No active conversations.</div>
           )}
         </div>
       </aside>
 
-      {/* Chat Area */}
-      <main className="flex-1 bg-slate-900 flex flex-col">
-        {activeChat ? (
-          <>
-            <header className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 backdrop-blur">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center font-bold text-indigo-400">
-                  {activeChat.userName ? activeChat.userName[0] : 'U'}
-                </div>
-                <div>
-                  <h2 className="font-bold text-slate-100">{activeChat.userName || activeChat.receiver_username}</h2>
-                  <span className="text-xs text-emerald-400">● Online</span>
-                </div>
-              </div>
-            </header>
-
-            <div className="flex-1 p-6 overflow-y-auto space-y-4">
-              {loading ? (
-                <div className="text-center text-xs text-slate-500">Loading messages...</div>
-              ) : messages.length > 0 ? (
-                messages.map(msg => {
-                  const isOwn = msg.author_id === user?.id || msg.isOwn;
-                  return (
-                    <div key={msg.id} className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
-                      <span className="text-xs text-slate-400 mb-1">{msg.author || msg.sender_username}</span>
-                      <div className={`p-3.5 rounded-2xl max-w-lg shadow-md text-sm ${isOwn ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700/80'}`}>
-                        {msg.content || msg.text}
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="text-center text-xs text-slate-500">No messages yet. Send a message to start!</div>
-              )}
-            </div>
-
-            <form onSubmit={handleSendMessage} className="p-4 border-t border-slate-800 bg-slate-900 flex gap-3">
-              <input
-                type="text"
-                placeholder={`Message @${activeChat.userName || 'user'}...`}
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition"
-              />
-              <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-3 rounded-xl transition cursor-pointer">
-                Send
-              </button>
-            </form>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
-            Select a conversation to start messaging.
-          </div>
-        )}
-      </main>
+      {active ? (
+        <Chat
+          key={active.id}
+          kind="dm"
+          id={active.id}
+          title={active.username}
+          subtitle="Direct message"
+          headerExtra={
+            <button
+              type="button"
+              onClick={() => setSearchParams({})}
+              className="md:hidden text-xs text-slate-400 hover:text-slate-200 cursor-pointer shrink-0"
+            >
+              ← All
+            </button>
+          }
+          placeholder={`Message ${active.username}…`}
+          emptyTitle="No messages yet"
+          emptyHint={`Say something to ${active.username}.`}
+        />
+      ) : (
+        <div className="flex-1 bg-slate-900 hidden md:flex items-center justify-center">
+          <EmptyState
+            title="Select a conversation"
+            hint="Pick someone on the left, or search for a user to start a new conversation."
+          />
+        </div>
+      )}
     </div>
   );
-};
-
-export default DirectMessages;
+}

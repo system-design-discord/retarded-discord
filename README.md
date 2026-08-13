@@ -80,6 +80,12 @@ backend/          Django 6 + DRF + Channels, PostgreSQL
   realtime/         WebSocket consumers
   scheduling/       scheduled messages, background jobs
 frontend/         React 19 + Vite SPA
+  src/components/   one directory per screen family
+    chat/             the conversation view and its primitives
+    layout/           the navigation rail
+  src/hooks/        useConversation — one conversation, whichever kind
+  src/services/     api.js (axios + JWT refresh), messages.js
+  src/lib/          pagination helpers
 nginx/            edge reverse proxy
 ```
 
@@ -154,6 +160,13 @@ Who may delete one is `roles.services.may_delete_message`, and it depends on whe
 | Direct message | only the author — never the recipient | US-3.3 |
 
 `backend/messaging/README.md` is the detail.
+
+### The chat surface
+
+Direct messages, groups and channel topics are the same UI with a different target, rendered through
+one set of primitives in `frontend/src/components/chat/`. There is exactly one message bubble in the
+codebase and it is meant to stay that way. `frontend/src/components/chat/README.md` is the detail,
+including the three field-name traps that have cost this project time.
 
 `CLAUDE.md` has the fuller tour, including the current known gaps.
 

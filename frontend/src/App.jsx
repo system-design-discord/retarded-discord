@@ -6,7 +6,7 @@ import Login from './components/auth/Login';
 import Register from './components/auth/Register';
 import EditProfile from './components/profile/EditProfile';
 import ViewProfile from './components/profile/ViewProfile';
-import Chat from './components/chat/Chat'; 
+import GroupChat from './components/groups/GroupChat';
 import DirectMessages from './components/dms/DirectMessages';
 import ChannelsDashboard from './components/channels/ChannelsDashboard';
 import GroupsDashboard from './components/groups/GroupsDashboard';
@@ -52,7 +52,10 @@ function App() {
         <Route path="/dms" element={<PrivateRoute><DirectMessages /></PrivateRoute>} />
         <Route path="/channels" element={<PrivateRoute><ChannelsDashboard /></PrivateRoute>} />
         <Route path="/groups" element={<PrivateRoute><GroupsDashboard /></PrivateRoute>} />
-        <Route path="/chat/:groupId" element={<PrivateRoute><Chat /></PrivateRoute>} />
+        {/* Both paths open the same view. SearchMessages links group hits at
+            /chat/<group_id>, and the groups dashboard opens the nested one. */}
+        <Route path="/chat/:groupId" element={<PrivateRoute><GroupChat /></PrivateRoute>} />
+        <Route path="/groups/:groupId/chat" element={<PrivateRoute><GroupChat /></PrivateRoute>} />
         <Route path="/search" element={<PrivateRoute><SearchMessages /></PrivateRoute>} />
         <Route path="/notifications" element={<PrivateRoute><NotificationsCenter /></PrivateRoute>} />
         

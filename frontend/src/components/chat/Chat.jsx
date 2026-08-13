@@ -1,158 +1,69 @@
-import { useState, useEffect, useRef, useContext } from 'react';
-import { useParams } from 'react-router-dom';
+import { useContext } from 'react';
 import { AuthContext } from '../../context/AuthContext';
-import api from '../../services/api';
+import useConversation from '../../hooks/useConversation';
+import { MessageComposer, MessageList } from './primitives';
 
-const MOCK_GROUP_MESSAGES = [
-    { id: 1, text: 'سلام بچه‌ها، به چت روم خوش آمدید!', sender: { id: 2, username: 'آرمان' }, created_at: '10:00' },
-    { id: 2, text: 'فرانت‌اند کاملاً به روز رسانی شد.', sender: { id: 1, username: 'امیر (شما)' }, created_at: '10:05' }
-];
+// The conversation view, and the only one. It takes a target and renders it:
+// a direct message, a group, or a channel topic. Nothing in here knows which,
+// which is what makes F-05 wiring rather than a third chat implementation.
+//
+// It used to hold a mock message array and an offline fallback, post
+// `{text, group_id}` where the serializer takes `group`, and append the message
+// to local state from inside its catch block — so a write that 400'd rendered
+// as a sent message (issues #77 and #78). All three are gone.
 
-export default function Chat() {
-    const { groupId } = useParams();
-    const { user } = useContext(AuthContext);
-    
-    const [messages, setMessages] = useState([]);
-    const [input, setInput] = useState('');
-    const [loading, setLoading] = useState(true);
-    
-    // State برای ویرایش پیام
-    const [editingId, setEditingId] = useState(null);
-    const [editInput, setEditInput] = useState('');
+export default function Chat({
+  kind,
+  id,
+  title,
+  subtitle,
+  headerExtra,
+  aside,
+  placeholder,
+  emptyTitle = 'No messages yet',
+  emptyHint = 'Send the first one.',
+  canDelete,
+}) {
+  const { user } = useContext(AuthContext);
+  const { messages, loading, error, send, edit, remove } = useConversation(kind, id);
 
-    const ws = useRef(null);
-    const messagesEndRef = useRef(null); 
+  // US-3.2 — "only and exclusively myself". The server grants nobody else, and
+  // hiding the control everywhere else keeps the UI honest about that.
+  const isAuthor = (message) => message.sender?.id === user?.id;
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
+  return (
+    <div className="flex-1 min-w-0 bg-slate-900 flex">
+      <main className="flex-1 min-w-0 flex flex-col">
+        <header className="p-4 border-b border-slate-800 flex items-center justify-between gap-4 bg-slate-900/90 backdrop-blur">
+          <div className="min-w-0">
+            <h2 className="font-bold text-slate-100 truncate">{title}</h2>
+            {subtitle && <p className="text-xs text-slate-500 truncate mt-0.5">{subtitle}</p>}
+          </div>
+          {headerExtra}
+        </header>
 
-    useEffect(() => {
-        const fetchHistory = async () => {
-            setLoading(true);
-            try {
-                const response = await api.get(`messages/?group_id=${groupId}`);
-                setMessages(response.data);
-            } catch (error) {
-                console.warn("بک‌اند در دسترس نیست. لود پیام‌های ماک گروه...");
-                setMessages(MOCK_GROUP_MESSAGES);
-            } finally {
-                setLoading(false);
-            }
-        };
-        
-        if (groupId) {
-            fetchHistory();
-        }
-    }, [groupId]);
+        {error && (
+          <div className="mx-4 mt-3 p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 text-rose-300 text-xs">
+            {error}
+          </div>
+        )}
 
-    useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
+        <MessageList
+          messages={messages}
+          loading={loading}
+          currentUserId={user?.id}
+          canEdit={isAuthor}
+          canDelete={canDelete ?? isAuthor}
+          onEdit={edit}
+          onDelete={remove}
+          emptyTitle={emptyTitle}
+          emptyHint={emptyHint}
+        />
 
-    // ارسال پیام
-    const sendMessage = async (e) => {
-        e.preventDefault();
-        if (!input.trim()) return;
+        <MessageComposer onSend={send} disabled={!id} placeholder={placeholder} />
+      </main>
 
-        const newMsgObj = {
-            id: Date.now(),
-            text: input,
-            sender: { id: user?.id || 1, username: user?.username || 'امیر' },
-            created_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-
-        try {
-            await api.post('messages/', { text: input, group_id: groupId });
-            setMessages((prev) => [...prev, newMsgObj]);
-            setInput('');
-        } catch (err) {
-            setMessages((prev) => [...prev, newMsgObj]);
-            setInput('');
-        }
-    };
-
-    // حذف پیام (US-3.3)
-    const handleDelete = (id) => {
-        setMessages(prev => prev.filter(m => m.id !== id));
-    };
-
-    // ذخیره ویرایش پیام (US-3.1, US-3.2)
-    const handleSaveEdit = (id) => {
-        if (!editInput.trim()) return;
-        setMessages(prev => prev.map(m => {
-            if (m.id === id) {
-                return { ...m, text: editInput, isEdited: true };
-            }
-            return m;
-        }));
-        setEditingId(null);
-        setEditInput('');
-    };
-
-    return (
-        <div className="flex flex-col h-screen bg-gray-900 text-white">
-            <div className="bg-gray-800 p-4 shadow-md border-b border-gray-700">
-                <h2 className="text-xl font-bold text-blue-500">گفتگوی گروه شماره: {groupId}</h2>
-            </div>
-
-            <div className="flex-1 p-4 overflow-y-auto space-y-4">
-                {loading ? (
-                    <div className="text-center text-gray-400 mt-10">در حال بارگذاری...</div>
-                ) : messages.length === 0 ? (
-                    <div className="text-center text-gray-500 mt-10">هنوز پیامی ارسال نشده است...</div>
-                ) : (
-                    messages.map((msg) => {
-                        const isOwn = msg.sender?.id === user?.id || msg.sender?.username?.includes('امیر');
-                        return (
-                            <div key={msg.id} className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
-                                <span className="text-xs text-gray-400 mb-1">{msg.sender?.username}</span>
-                                <div className={`p-3 rounded-lg w-max max-w-xl ${isOwn ? 'bg-blue-600' : 'bg-gray-700'}`}>
-                                    {editingId === msg.id ? (
-                                        <div className="flex gap-2">
-                                            <input 
-                                                type="text" 
-                                                value={editInput} 
-                                                onChange={(e) => setEditInput(e.target.value)}
-                                                className="bg-gray-800 text-white px-2 py-1 rounded text-sm"
-                                            />
-                                            <button onClick={() => handleSaveEdit(msg.id)} className="text-xs bg-green-600 px-2 rounded">ذخیره</button>
-                                            <button onClick={() => setEditingId(null)} className="text-xs bg-gray-500 px-2 rounded">لغو</button>
-                                        </div>
-                                    ) : (
-                                        <div>
-                                            <span className="text-gray-100">{msg.text}</span>
-                                            {msg.isEdited && <span className="text-xs italic text-gray-300 mr-2">(ویرایش‌شده)</span>}
-                                        </div>
-                                    )}
-                                </div>
-                                {isOwn && editingId !== msg.id && (
-                                    <div className="flex gap-2 text-xs text-gray-400 mt-1">
-                                        <span onClick={() => { setEditingId(msg.id); setEditInput(msg.text); }} className="cursor-pointer hover:text-blue-400">ویرایش</span>
-                                        <span onClick={() => handleDelete(msg.id)} className="cursor-pointer hover:text-red-400">حذف</span>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })
-                )}
-                <div ref={messagesEndRef} />
-            </div>
-
-            <div className="p-4 bg-gray-800 border-t border-gray-700">
-                <form onSubmit={sendMessage} className="flex gap-2">
-                    <input
-                        type="text"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        placeholder="پیام خود را بنویسید..."
-                        className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                    />
-                    <button type="submit" className="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold transition-colors">
-                        ارسال
-                    </button>
-                </form>
-            </div>
-        </div>
-    );
+      {aside}
+    </div>
+  );
 }
