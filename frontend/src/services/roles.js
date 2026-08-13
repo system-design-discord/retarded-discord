@@ -22,9 +22,21 @@ import { fetchAllPages } from '../lib/pagination';
 // server as well, and INT-2's matrix exercises exactly these paths with the UI
 // bypassed.
 
+// `listChannels` and `getChannel` are `channels_app`'s endpoints rather than
+// this module's, and they are here because the role manager needs a channel to
+// manage and a name to put at the top of it. They are the minimum this surface
+// needs; when F-04 lands a channels service, it should take them over and this
+// file should import them.
+
 /** Channels the caller belongs to. */
 export function listChannels() {
   return fetchAllPages(api, 'channels/');
+}
+
+/** One channel, with its topics nested. Needs membership, not a permission. */
+export async function getChannel(channelId) {
+  const response = await api.get(`channels/${channelId}/`);
+  return response.data;
 }
 
 /**

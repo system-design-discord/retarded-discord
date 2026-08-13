@@ -1,0 +1,365 @@
+import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import useChannelPermissions from '../../hooks/useChannelPermissions';
+import useChannelRoles from '../../hooks/useChannelRoles';
+import { PERMISSIONS, PERMISSION_KEYS } from '../../lib/permissions';
+import { getChannel } from '../../services/roles';
+import NavSidebar from '../layout/NavSidebar';
+import { EmptyState } from '../chat/primitives';
+
+// F-06 — US-4.2, US-8.1, US-8.2, US-8.3.
+//
+// The screen that demonstrates the whole roles chain: a role is a row in a
+// table with eight boolean columns, and changing one takes effect on the
+// holder's very next request with no restart. That is brief §5.8, and it is
+// only visible if something lets you change it.
+//
+// **Two things this screen does not do, deliberately.**
+//
+//   * It does not decide anything. Every control here is refused by the server
+//     as well when it should be — `roles.services` is the authority and
+//     `common/permissions.py` asks it on every call. Disabling a checkbox is a
+//     courtesy so the user is not invited to fail; INT-2's permission matrix
+//     runs the same calls with this UI bypassed precisely because a hidden
+//     button is not a permission check.
+//   * It does not guess. A refused write leaves the list exactly as the server
+//     last described it — see the note in `useChannelRoles`.
+//
+// US-8.2 is why the toggles are gated by what *you* hold: "assign various
+// capabilities that fall within my own permissions". `RoleSerializer.validate`
+// enforces it and answers 400 per offending field; the messages surface here.
+
+function PermissionGrid({ role, heldByActor, disabled, onToggle }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 mt-3">
+      {PERMISSIONS.map(({ key, label, fa, hint }) => {
+        // You cannot grant what you do not hold (US-8.2). Revoking is always
+        // allowed — taking away less than you have is never an escalation.
+        const wouldGrant = !role[key];
+        const refused = wouldGrant && !heldByActor[key];
+
+        return (
+          <label
+            key={key}
+            className={`flex items-start gap-2 rounded-lg px-2 py-1.5 ${
+              refused ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-slate-800/60'
+            }`}
+            title={refused ? `You do not hold ${key}, so you cannot grant it.` : hint}
+          >
+            <input
+              type="checkbox"
+              className="mt-1 accent-indigo-500"
+              checked={Boolean(role[key])}
+              disabled={disabled || refused}
+              onChange={(event) => onToggle(key, event.target.checked)}
+            />
+            <span className="min-w-0">
+              <span className="block text-xs font-medium text-slate-200">
+                {label} <span className="text-slate-500">· {fa}</span>
+              </span>
+              {/* The API key, shown on purpose: the acceptance criterion is
+                  that the eight toggles map one-to-one onto the model
+                  booleans, and this is how that is demonstrated. */}
+              <code className="block text-[10px] text-slate-600">{key}</code>
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+function RoleCard({ role, heldByActor, busy, onToggle, onRename, onDelete }) {
+  const [name, setName] = useState(role.name);
+  const [renaming, setRenaming] = useState(false);
+
+  useEffect(() => setName(role.name), [role.name]);
+
+  const granted = PERMISSION_KEYS.filter((key) => role[key]).length;
+
+  return (
+    <li className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+      <div className="flex items-start justify-between gap-3">
+        {renaming ? (
+          <form
+            className="flex gap-2 min-w-0 flex-1"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              if (name.trim() && name.trim() !== role.name) await onRename(name.trim());
+              setRenaming(false);
+            }}
+          >
+            <input
+              autoFocus
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-sm"
+            />
+            <button type="submit" className="text-xs text-indigo-400 hover:text-indigo-300 cursor-pointer">
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setName(role.name);
+                setRenaming(false);
+              }}
+              className="text-xs text-slate-500 hover:text-slate-300 cursor-pointer"
+            >
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <div className="min-w-0">
+            <h3 className="font-semibold truncate">{role.name}</h3>
+            <p className="text-xs text-slate-500">
+              {granted} of {PERMISSION_KEYS.length} permissions granted
+            </p>
+          </div>
+        )}
+
+        {!renaming && (
+          <div className="flex gap-3 shrink-0">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setRenaming(true)}
+              className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer"
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onDelete}
+              className="text-xs text-rose-400 hover:text-rose-300 cursor-pointer"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+
+      <PermissionGrid role={role} heldByActor={heldByActor} disabled={busy} onToggle={onToggle} />
+    </li>
+  );
+}
+
+export default function RoleManager() {
+  const { channelId } = useParams();
+
+  const {
+    permissions,
+    role: myRole,
+    isOwner,
+    loading: loadingPermissions,
+    error: permissionError,
+    can,
+  } = useChannelPermissions(channelId);
+
+  const mayManage = can('can_change_role');
+
+  // Do not fire the roles list at somebody who cannot read it. It needs
+  // `can_change_role`, so asking anyway would trade a rendered explanation for
+  // a 403 in the console.
+  const { roles, members, loading, error, setError, create, update, remove, assign } = useChannelRoles(
+    channelId,
+    { enabled: mayManage },
+  );
+
+  const [channel, setChannel] = useState(null);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getChannel(channelId)
+      .then(setChannel)
+      .catch(() => setChannel(null));
+  }, [channelId]);
+
+  const run = async (work) => {
+    setBusy(true);
+    try {
+      await work();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const heldByActor = permissions ?? {};
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex">
+      <NavSidebar active="/channels" />
+
+      <main className="flex-1 min-w-0 p-4 md:p-8">
+        <header className="mb-6">
+          <Link to="/channels/roles" className="text-xs text-slate-500 hover:text-slate-300">
+            ← All channels
+          </Link>
+          <h1 className="text-xl font-bold mt-1">
+            Roles in <span className="text-indigo-400"># {channel?.name ?? channelId}</span>
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">
+            {isOwner
+              ? 'You own this channel, so you hold all eight permissions implicitly.'
+              : myRole
+                ? `Your role here is ${myRole}.`
+                : 'You hold no role in this channel.'}
+          </p>
+        </header>
+
+        {(permissionError || error) && (
+          <div className="mb-4 rounded-xl border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200 whitespace-pre-line">
+            {permissionError || error}
+            {error && (
+              <button
+                type="button"
+                onClick={() => setError('')}
+                className="ml-3 text-xs underline cursor-pointer"
+              >
+                dismiss
+              </button>
+            )}
+          </div>
+        )}
+
+        {loadingPermissions ? (
+          <p className="text-sm text-slate-500">Loading…</p>
+        ) : !mayManage ? (
+          // Not an error, an answer. The server would refuse every write on
+          // this screen, so it says so instead of rendering controls that 403.
+          <section className="max-w-2xl rounded-xl border border-slate-800 bg-slate-900 p-6">
+            <h2 className="font-semibold">You cannot manage roles here</h2>
+            <p className="text-sm text-slate-400 mt-1">
+              Managing roles needs <code className="text-slate-300">can_change_role</code>, which you do
+              not hold in this channel. Ask the channel admin for a role that grants it.
+            </p>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mt-6 mb-2">
+              What you do hold
+            </h3>
+            <ul className="text-sm space-y-1">
+              {PERMISSIONS.map(({ key, label }) => (
+                <li key={key} className="flex items-center gap-2">
+                  <span className={heldByActor[key] ? 'text-emerald-400' : 'text-slate-700'}>
+                    {heldByActor[key] ? '✓' : '×'}
+                  </span>
+                  <span className={heldByActor[key] ? 'text-slate-200' : 'text-slate-600'}>{label}</span>
+                  <code className="text-[10px] text-slate-600">{key}</code>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+            <section>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3">Roles</h2>
+
+              <form
+                className="flex gap-2 mb-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const name = newRoleName.trim();
+                  if (!name) return;
+                  // A new role grants nothing — every column defaults to False,
+                  // so it is safe until somebody deliberately ticks a box.
+                  run(async () => {
+                    const failed = await create({ name });
+                    if (!failed) setNewRoleName('');
+                  });
+                }}
+              >
+                <input
+                  value={newRoleName}
+                  onChange={(event) => setNewRoleName(event.target.value)}
+                  placeholder="New role name — Moderator, Greeter, …"
+                  className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-600"
+                />
+                <button
+                  type="submit"
+                  disabled={busy || !newRoleName.trim()}
+                  className="shrink-0 bg-indigo-600 disabled:opacity-40 text-white px-4 py-2.5 rounded-xl text-sm font-semibold cursor-pointer"
+                >
+                  Create
+                </button>
+              </form>
+
+              {loading ? (
+                <p className="text-sm text-slate-500">Loading…</p>
+              ) : roles.length === 0 ? (
+                <EmptyState
+                  icon="🛡️"
+                  title="No roles in this channel yet"
+                  hint="Create one above, then tick the permissions it should grant."
+                />
+              ) : (
+                <ul className="space-y-3">
+                  {roles.map((role) => (
+                    <RoleCard
+                      key={role.id}
+                      role={role}
+                      heldByActor={heldByActor}
+                      busy={busy}
+                      onToggle={(key, value) => run(() => update(role.id, { [key]: value }))}
+                      onRename={(name) => run(() => update(role.id, { name }))}
+                      onDelete={() => run(() => remove(role.id))}
+                    />
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3">Members</h2>
+
+              {loading ? (
+                <p className="text-sm text-slate-500">Loading…</p>
+              ) : members.length === 0 ? (
+                <EmptyState icon="👥" title="This channel has no members" />
+              ) : (
+                <ul className="space-y-2">
+                  {members.map((member) => (
+                    <li
+                      key={member.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900 px-4 py-3"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium truncate">{member.user.username}</span>
+                        {member.is_owner && (
+                          <span className="block text-[10px] uppercase tracking-wider text-amber-500">
+                            Owner · holds all eight
+                          </span>
+                        )}
+                      </span>
+
+                      <select
+                        value={member.role_id ?? ''}
+                        disabled={busy || member.is_owner}
+                        title={
+                          member.is_owner
+                            ? 'The channel owner holds every permission implicitly; a role would add nothing.'
+                            : undefined
+                        }
+                        onChange={(event) =>
+                          run(() => assign(member.user.id, event.target.value ? Number(event.target.value) : null))
+                        }
+                        className="shrink-0 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs disabled:opacity-40 cursor-pointer"
+                      >
+                        <option value="">No role</option>
+                        {roles.map((role) => (
+                          <option key={role.id} value={role.id}>
+                            {role.name}
+                          </option>
+                        ))}
+                      </select>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
