@@ -16,4 +16,8 @@ websocket_urlpatterns = [
         r'^ws/(?P<kind>dm|group|topic)/(?P<target_id>\d+)/$',
         consumers.ConversationConsumer.as_asgi(),
     ),
+    # Last, and matching everything left: an unrouted WebSocket path makes
+    # URLRouter raise, which Channels reports as a 500. A removed route should
+    # refuse, not error.
+    re_path(r'^ws/', consumers.UnknownRouteConsumer.as_asgi()),
 ]

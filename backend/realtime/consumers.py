@@ -137,3 +137,23 @@ class ConversationConsumer(AsyncWebsocketConsumer):
             'type': 'message.created',
             'message': event['message'],
         }))
+
+
+class UnknownRouteConsumer(AsyncWebsocketConsumer):
+    """Anything that is not one of the three conversation routes.
+
+    Without this, `URLRouter` raises on an unmatched path and Channels turns
+    that into a **500** — so `ws/chat/<group_id>/`, the impersonation route this
+    card removed, answered with a server error and a traceback in the log rather
+    than a refusal. The route is gone on purpose; saying so plainly is better
+    evidence than a stack trace.
+    """
+
+    async def connect(self):
+        await self.accept()
+        await self.send(text_data=json.dumps({
+            'type': 'error',
+            'detail': 'Unknown conversation. Use /ws/dm/<user_id>/, /ws/group/<group_id>/ '
+                      'or /ws/topic/<topic_id>/ with ?token=<access>.',
+        }))
+        await self.close(code=CLOSE_NOT_FOUND)

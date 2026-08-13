@@ -198,6 +198,19 @@ async def test_the_socket_writes_nothing_whatever_the_client_claims(user, other_
     await communicator.disconnect()
 
 
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_the_removed_impersonation_route_refuses_rather_than_erroring():
+    """`ws/chat/<group_id>/` was the route that took its sender from the client
+    payload. It is gone; hitting it must be a clean refusal, not a 500."""
+    communicator = WebsocketCommunicator(application, '/ws/chat/1/')
+    await communicator.connect()
+
+    assert (await communicator.receive_json_from())['type'] == 'error'
+    assert (await communicator.receive_output())['code'] == CLOSE_NOT_FOUND
+    await communicator.disconnect()
+
+
 # ------------------------------------------------------------------ helpers
 
 async def _publish(handler, message):
