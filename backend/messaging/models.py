@@ -53,7 +53,12 @@ class MessageQuerySet(models.QuerySet):
         if user is None or not user.is_authenticated:
             return self.none()
 
-        return self.filter(
+        # A scheduled message is persisted the moment it is created but is not
+        # part of any conversation until the dispatcher releases it (SC-02), so
+        # the scope that decides what may be read is also what hides it — from
+        # its own author included, who reads a pending schedule through
+        # `/api/messages/scheduled/` instead.
+        return self.filter(is_delivered=True).filter(
             Q(sender=user)                                  # anything you wrote
             | Q(recipient=user)                             # a DM addressed to you
             | Q(group__members=user)                        # a group you are in
@@ -103,6 +108,16 @@ class Message(models.Model):
     text = models.TextField(blank=True, null=True)
     media = models.ForeignKey('media_app.MediaFile', on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # SC-02: an ordinary message is delivered the instant it is written, which
+    # is why `is_delivered` defaults to True — every row that existed before
+    # scheduling did was, and the migration needs no data step. A scheduled
+    # message is the exception: it is written with a future `scheduled_at` and
+    # False, and stays invisible to `visible_to` until the SC-03 dispatcher
+    # flips it. Indexed because the dispatcher's query is "due and not yet sent".
+    scheduled_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    is_delivered = models.BooleanField(default=True)
+
     is_read = models.BooleanField(default=False)
 
     # US-3.1: an edited message is visibly labelled, and its original timestamp
