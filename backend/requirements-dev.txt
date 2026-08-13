@@ -7,5 +7,13 @@
 pytest==9.1.1
 pytest-django==4.13.0
 
+# The gateway's tests drive a real ASGI application through
+# channels.testing.WebsocketCommunicator, which is async all the way down.
+pytest-asyncio==1.3.0
+
+# A WebSocket client for walking the gateway by hand over nginx, the way the
+# INT-* cards walk the REST API with curl. Not imported by any test.
+websockets==15.0.1
+
 # Linter and import sorter, one tool. Config in ruff.toml.
 ruff==0.16.2
