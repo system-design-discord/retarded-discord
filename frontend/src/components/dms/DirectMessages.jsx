@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import { listDirectMessages } from '../../services/messages';
+import { conversationsFrom, nameMissingPartners } from '../../hooks/useRecentChats';
 import { unwrapList } from '../../lib/pagination';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
@@ -20,56 +21,10 @@ import { Avatar, EmptyState } from '../chat/primitives';
 // is a real limitation, not a stand-in — it reads every visible message to
 // build the sidebar. A `conversations/` endpoint is the fix, and it belongs to
 // whoever picks it up, not to this card.
-
-/** Group direct messages into one row per correspondent, newest first. */
-function conversationsFrom(messages, meId) {
-  const byPartner = new Map();
-
-  for (const message of messages) {
-    // `sender` is nested and `recipient` is a bare id — that asymmetry is the
-    // serializer's, and it is why a partner's username is sometimes unknown.
-    const partnerId = message.sender?.id === meId ? message.recipient : message.sender?.id;
-    if (!partnerId || partnerId === meId) continue;
-
-    const known = byPartner.get(partnerId);
-    const username = message.sender?.id === partnerId ? message.sender.username : known?.username;
-
-    if (!known || new Date(message.created_at) >= new Date(known.at)) {
-      byPartner.set(partnerId, {
-        id: partnerId,
-        username: username ?? known?.username ?? null,
-        preview: message.text ?? '',
-        at: message.created_at,
-      });
-    } else if (username && !known.username) {
-      byPartner.set(partnerId, { ...known, username });
-    }
-  }
-
-  return [...byPartner.values()].sort((a, b) => new Date(b.at) - new Date(a.at));
-}
-
-/** Fill in the usernames the message payload could not supply. */
-async function nameMissingPartners(conversations) {
-  const unnamed = conversations.filter((conversation) => !conversation.username);
-  if (unnamed.length === 0) return conversations;
-
-  const names = new Map();
-  await Promise.all(
-    unnamed.map(async ({ id }) => {
-      try {
-        const { data } = await api.get(`profile/${id}/`);
-        names.set(id, data.user?.username ?? `User ${id}`);
-      } catch {
-        names.set(id, `User ${id}`);
-      }
-    }),
-  );
-
-  return conversations.map((conversation) =>
-    conversation.username ? conversation : { ...conversation, username: names.get(conversation.id) },
-  );
-}
+//
+// `conversationsFrom` and `nameMissingPartners` moved to
+// `hooks/useRecentChats.js` with U-02, which needed the same rows for the
+// dashboard. Behaviour here is unchanged — it is the same code, imported.
 
 export default function DirectMessages() {
   const { user } = useContext(AuthContext);

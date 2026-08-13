@@ -36,15 +36,21 @@ export function listMessages(target) {
 }
 
 /**
- * Every direct message the caller can see, for deriving the conversation list.
+ * Every message the caller can see, across all pages.
  *
- * There is no `conversations/` endpoint, so the sidebar is built client-side
- * from the messages themselves: `messages/` with no selector returns everything
- * `Message.objects.visible_to` allows, and a direct message is the subset with
- * a `recipient`.
+ * There is no `conversations/` endpoint, so both conversation lists in the app
+ * are derived client-side from the messages themselves: `messages/` with no
+ * selector returns everything `Message.objects.visible_to` allows, and each
+ * target is a subset of that. A real `conversations/` endpoint is the fix and
+ * belongs to whoever picks it up.
  */
+export function listVisibleMessages() {
+  return fetchAllPages(api, 'messages/');
+}
+
+/** The direct-message subset — those carrying a `recipient`. */
 export async function listDirectMessages() {
-  const messages = await fetchAllPages(api, 'messages/');
+  const messages = await listVisibleMessages();
   return messages.filter((message) => message.recipient !== null);
 }
 

@@ -1,19 +1,19 @@
-import React, { useState, useContext } from 'react';
+import React, { useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext'; // Import the AuthContext
-
-const RECENT_CHATS = [
-  { id: 1, type: 'dms', title: 'Arman (Backend Lead)', lastMessage: 'API endpoints are ready for integration.', time: '10:45 AM' },
-  { id: 2, type: 'channels', title: '# general-discussion', lastMessage: 'Arvin: Sprint 2 review is scheduled for tomorrow.', time: '11:20 AM' },
-  { id: 3, type: 'groups', title: 'CE-40418 Discord Team', lastMessage: 'Majid: Database fixtures updated.', time: 'Yesterday' }
-];
+import useRecentChats from '../../hooks/useRecentChats';
+import { EmptyState, Timestamp } from '../chat/primitives';
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [recentChats] = useState(RECENT_CHATS);
-  
+
   // Grab the user from context to display their name
-  const { user } = useContext(AuthContext); 
+  const { user } = useContext(AuthContext);
+
+  // U-02: these rows used to be a hardcoded array naming teammates who were
+  // not in the database. They are derived from the message API now, by the
+  // same helpers the direct-message sidebar uses.
+  const { chats, loading, error } = useRecentChats(user?.id); 
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
@@ -80,17 +80,32 @@ const Dashboard = () => {
           <div>
             <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-4">Recent Conversations</h3>
             <div className="space-y-3">
-              {recentChats.map(chat => (
-                <div 
-                  key={chat.id} 
-                  onClick={() => navigate(`/${chat.type}`)}
-                  className="p-4 bg-slate-900 border border-slate-800/80 hover:bg-slate-800/60 rounded-xl flex justify-between items-center transition cursor-pointer"
+              {loading && <div className="text-sm text-slate-500">Loading…</div>}
+
+              {error && (
+                <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 text-rose-300 text-xs">
+                  {error}
+                </div>
+              )}
+
+              {!loading && !error && chats.length === 0 && (
+                <EmptyState
+                  title="No conversations yet"
+                  hint="Start one from Direct Messages, or create a group."
+                />
+              )}
+
+              {chats.map(chat => (
+                <div
+                  key={chat.key}
+                  onClick={() => navigate(chat.to)}
+                  className="p-4 bg-slate-900 border border-slate-800/80 hover:bg-slate-800/60 rounded-xl flex justify-between items-center gap-4 transition cursor-pointer"
                 >
-                  <div>
-                    <div className="font-bold text-slate-200">{chat.title}</div>
-                    <div className="text-xs text-slate-400 mt-1">{chat.lastMessage}</div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-slate-200 truncate">{chat.title}</div>
+                    <div className="text-xs text-slate-400 mt-1 truncate">{chat.preview}</div>
                   </div>
-                  <span className="text-xs text-slate-500">{chat.time}</span>
+                  <Timestamp value={chat.at} className="shrink-0" />
                 </div>
               ))}
             </div>
