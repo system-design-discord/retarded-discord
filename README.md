@@ -14,11 +14,15 @@ Everything you need is Docker.
 ```bash
 cp .env.example .env
 docker compose up --build
-docker compose exec backend python manage.py seed_data
 ```
 
 Open **http://localhost:8080**. Sign in as `majid`, `amirm` or `arvin`, password `testpass123`, or
 register a new account.
+
+The demo accounts are seeded by the backend's entrypoint on every start, so those two commands are
+the whole of it. Seeding is idempotent and re-runnable by hand
+(`docker compose exec backend python manage.py seed_data`); set `DJANGO_SEED_DATA=false` in `.env`
+if you would rather start from an empty database.
 
 One origin serves the whole product:
 
@@ -31,6 +35,52 @@ One origin serves the whole product:
 | `/admin/` | Django admin |
 
 Change the published port with `NGINX_PORT` in `.env`.
+
+### On Windows
+
+Nothing extra to install and nothing extra to run — Docker Desktop and the two commands above. One
+thing is worth knowing, because it has cost this team an evening.
+
+Git for Windows installs with `core.autocrlf=true`, which rewrites text files to CRLF on checkout.
+Every file here is read by a Linux container, and a `\r` on the first line of `entrypoint.sh` makes
+Docker fail with:
+
+```
+exec /entrypoint.sh: no such file or directory
+```
+
+which names a file that plainly exists. The backend then restarts forever, so
+`docker compose exec backend ...` cannot run either — which is why the same bug also shows up as
+**"no such user" at the login screen**: the seed never got a chance to run.
+
+`.gitattributes` pins every text file to LF, so a clone made today is already correct, and
+`backend/Dockerfile` strips CR out of the entrypoint at build time. Between them the stack comes up
+from a working tree in any state — a tree with CRLF in every single file is part of the test for
+this — so **you do not have to fix your checkout to run the project**:
+
+```bash
+git pull
+docker compose down -v            # only if the stack is already in a bad state
+docker compose up --build
+```
+
+Fixing the checkout is still worth doing, because CRLF in the *source* is the next person's merge
+conflict. Note that pulling `.gitattributes` does not convert files you already have, and neither
+does `git add --renormalize .` — once `eol=lf` is in force, Git converts your CRLF file to LF before
+comparing it to the index, decides nothing has changed, and leaves the file alone. The command that
+actually rewrites the working tree empties the index and checks everything out again:
+
+```bash
+git status            # must be clean: the next command discards uncommitted work
+git rm --cached -r .
+git reset --hard
+```
+
+### On Linux
+
+If `id -u` prints something other than `1000`, set `APP_UID` and `APP_GID` in `.env` to your own and
+rebuild. The backend source is bind-mounted, so the container writes to your files as that uid;
+mismatched, anything writing into the tree (pytest's cache, most visibly) fails on permissions.
 
 ## Working on it
 

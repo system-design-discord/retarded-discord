@@ -24,6 +24,10 @@ services:
       args:
         # pytest and ruff in the running container, for the INT-* scripts.
         INSTALL_DEV: ${BACKEND_INSTALL_DEV:-true}
+        # Only matters on Linux, where the bind mount below writes to the host
+        # as this uid. Leave alone unless your account is not 1000; see .env.example.
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
     restart: unless-stopped
     depends_on:
       db:
@@ -34,6 +38,9 @@ services:
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend,nginx}
       DJANGO_CORS_ALLOWED_ORIGINS: ${DJANGO_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
       DJANGO_MEDIA_ROOT: /app/media
+      # The entrypoint seeds the README's demo accounts on every start. It is
+      # idempotent; set to false for an empty database.
+      DJANGO_SEED_DATA: ${DJANGO_SEED_DATA:-true}
       POSTGRES_DB: ${POSTGRES_DB:-discord}
       POSTGRES_USER: ${POSTGRES_USER:-discord}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-discord}

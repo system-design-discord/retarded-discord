@@ -1,0 +1,48 @@
+# Line endings are a portability contract, not a preference.
+#
+# Git for Windows installs with `core.autocrlf=true`, so without this file a
+# Windows clone rewrites every text file to CRLF on checkout. Everything in
+# this repository is read by a Linux container, and a stray \r breaks them in
+# ways that do not name themselves:
+#
+#   backend/entrypoint.sh  -> `\r` on the shebang line, so Docker reports
+#                             "exec /entrypoint.sh: no such file or directory"
+#                             and the backend restarts forever
+#   .env / .env.example    -> values arrive with a trailing \r, so
+#                             DJANGO_ALLOWED_HOSTS never matches and NGINX_PORT
+#                             is not a number
+#   nginx/*.conf           -> directives parse, but only by nginx's goodwill
+#
+# `eol=lf` means: normalise to LF in the repository *and* check out LF on every
+# platform. Windows editors have handled LF for a decade; containers have not
+# handled CRLF ever.
+#
+# If you cloned before this file existed, your working tree still has CRLF.
+# Fix it once, from the repository root:
+#
+#     git add --renormalize .
+#     git checkout -- .
+#
+# The build no longer depends on your having done so — backend/Dockerfile
+# strips CR from the entrypoint itself — but everything else in the tree does.
+
+* text=auto eol=lf
+
+# Spelled out for the files where a wrong ending is fatal rather than untidy.
+*.sh          text eol=lf
+Dockerfile    text eol=lf
+*.conf        text eol=lf
+.env.example  text eol=lf
+
+# Never touched: Git guesses well from content, but not on an empty file, and a
+# corrupted upload fixture is a bad afternoon.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
