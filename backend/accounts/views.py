@@ -11,11 +11,48 @@ from .models import Profile
 from .serializers import (
     ProfileSerializer,
     PublicProfileSerializer,
+    PublicUserSerializer,
     RegisterSerializer,
     UserSerializer,
 )
 
 User = get_user_model()
+
+
+class UserDirectoryView(generics.ListAPIView):
+    """PLACEHOLDER — card A-11 owns the real one, issue #90.
+
+    `F-03` needs some way to name another user, and the API offers none: the
+    only lookup is `profile/<int:user_id>/`, which wants the id you are trying
+    to find. Without this a freshly registered account cannot start a
+    conversation with anybody, so US-2.1 is not demonstrable from a clean clone.
+
+    This is the smallest thing that unblocks that view, not a finished endpoint.
+    It reads through `PublicUserSerializer`, so nothing private can leak out of
+    it, and a blank term answers nothing rather than dumping the user table —
+    the same choice `M-08`'s search makes.
+
+    TODO(A-11): honour a discoverability preference rather than listing every
+    account, decide what a blank term should mean, order by something a human
+    would expect rather than alphabetically, and cover all of it with tests.
+    There are none, deliberately: a stub with a passing test suite reads as
+    finished work.
+    """
+
+    serializer_class = PublicUserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        term = self.request.query_params.get('search', '').strip()
+        if not term:
+            return User.objects.none()
+
+        return (
+            User.objects
+            .exclude(pk=self.request.user.pk)
+            .filter(username__icontains=term)
+            .order_by('username')
+        )
 
 
 class RegisterView(generics.CreateAPIView):
