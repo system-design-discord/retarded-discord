@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useContext } from 'react';
 import { AuthContext } from './context/AuthContext';
 
@@ -6,7 +6,8 @@ import Login from './components/auth/Login';
 import Register from './components/auth/Register';
 import EditProfile from './components/profile/EditProfile';
 import ViewProfile from './components/profile/ViewProfile';
-import Chat from './components/chat/Chat'; 
+import Chat from './components/chat/Chat';
+import NavSidebar from './components/layout/NavSidebar';
 import DirectMessages from './components/dms/DirectMessages';
 import ChannelsDashboard from './components/channels/ChannelsDashboard';
 import GroupsDashboard from './components/groups/GroupsDashboard';
@@ -27,6 +28,18 @@ const NotFound = () => (
     </a>
   </div>
 );
+
+// The group conversation, read from the URL. SearchMessages links group hits at
+// /chat/<group_id>, so the path stays where it is.
+const GroupChatRoute = () => {
+  const { groupId } = useParams();
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex">
+      <NavSidebar active="/groups" />
+      <Chat kind="group" id={groupId} title={`Group #${groupId}`} placeholder="Message the group…" />
+    </div>
+  );
+};
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
@@ -52,7 +65,7 @@ function App() {
         <Route path="/dms" element={<PrivateRoute><DirectMessages /></PrivateRoute>} />
         <Route path="/channels" element={<PrivateRoute><ChannelsDashboard /></PrivateRoute>} />
         <Route path="/groups" element={<PrivateRoute><GroupsDashboard /></PrivateRoute>} />
-        <Route path="/chat/:groupId" element={<PrivateRoute><Chat /></PrivateRoute>} />
+        <Route path="/chat/:groupId" element={<PrivateRoute><GroupChatRoute /></PrivateRoute>} />
         <Route path="/search" element={<PrivateRoute><SearchMessages /></PrivateRoute>} />
         <Route path="/notifications" element={<PrivateRoute><NotificationsCenter /></PrivateRoute>} />
         
