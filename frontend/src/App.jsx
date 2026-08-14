@@ -12,6 +12,7 @@ import ChannelsDashboard from './components/channels/ChannelsDashboard';
 import ChannelView from './components/channels/ChannelView';
 import RoleManager from './components/channels/RoleManager';
 import GroupsDashboard from './components/groups/GroupsDashboard';
+import GroupSettings from './components/groups/GroupSettings';
 import Dashboard from './components/dashboard/Dashboard';
 import SearchMessages from './components/search/SearchMessages';
 import NotificationsCenter from './components/notifications/NotificationsCenter';
@@ -63,6 +64,11 @@ function App() {
             /chat/<group_id>, and the groups dashboard opens the nested one. */}
         <Route path="/chat/:groupId" element={<PrivateRoute><GroupChat /></PrivateRoute>} />
         <Route path="/groups/:groupId/chat" element={<PrivateRoute><GroupChat /></PrivateRoute>} />
+        {/* U-10 — group settings is its own route rather than a modal over the
+            chat. The chat's member aside is `hidden lg:block`, so on a phone
+            this is the only way to the member list. The mirror of
+            /channels/:channelId/roles. */}
+        <Route path="/groups/:groupId/settings" element={<PrivateRoute><GroupSettings /></PrivateRoute>} />
         <Route path="/search" element={<PrivateRoute><SearchMessages /></PrivateRoute>} />
         <Route path="/notifications" element={<PrivateRoute><NotificationsCenter /></PrivateRoute>} />
         

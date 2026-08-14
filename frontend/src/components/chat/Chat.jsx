@@ -1,6 +1,7 @@
-import { useContext } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import useConversation from '../../hooks/useConversation';
+import ScheduleMessage from './ScheduleMessage';
 import { MessageComposer, MessageList } from './primitives';
 
 // The conversation view, and the only one. It takes a target and renders it:
@@ -11,6 +12,13 @@ import { MessageComposer, MessageList } from './primitives';
 // `{text, group_id}` where the serializer takes `group`, and append the message
 // to local state from inside its catch block — so a write that 400'd rendered
 // as a sent message (issues #77 and #78). All three are gone.
+//
+// **Scheduling (U-12) is threaded through here rather than added to three
+// screens.** The composer raises `onSchedule`, this opens `ScheduleMessage`
+// with the target it already holds, and the direct-message, group and topic
+// views get it without one of them mentioning it. That is the rule in
+// `README.md`: if a fourth conversation kind appears and somebody writes a
+// second scheduler, F-00 has been undone — add a prop instead.
 
 export default function Chat({
   kind,
@@ -26,6 +34,47 @@ export default function Chat({
 }) {
   const { user } = useContext(AuthContext);
   const { messages, loading, error, live, send, edit, remove } = useConversation(kind, id);
+
+  const [scheduling, setScheduling] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  // The composer awaits `onSchedule` and clears its input only if the answer is
+  // truthy, which is the same rule it applies to a send. The modal outlives
+  // that answer, though — it stays open after a successful schedule so the row
+  // it just created appears in the pending list — so the promise is parked here
+  // and settled from whichever happens first: something was scheduled, or the
+  // modal was closed having scheduled nothing.
+  const settle = useRef(null);
+
+  const requestSchedule = (text) =>
+    new Promise((resolve) => {
+      settle.current = resolve;
+      setDraft(text);
+      setScheduling(true);
+    });
+
+  const scheduled = (created) => {
+    settle.current?.(Boolean(created));
+    settle.current = null;
+  };
+
+  const closeSchedule = () => {
+    // Resolves `false` only if nothing was scheduled; once `scheduled` has run,
+    // `settle.current` is null and the composer has already cleared its draft.
+    settle.current?.(false);
+    settle.current = null;
+    setScheduling(false);
+  };
+
+  // An unmount with the modal open would leave the composer awaiting a promise
+  // that can never settle, and its button disabled for as long as it lived.
+  useEffect(
+    () => () => {
+      settle.current?.(false);
+      settle.current = null;
+    },
+    [],
+  );
 
   // US-3.2 — "only and exclusively myself". The server grants nobody else, and
   // hiding the control everywhere else keeps the UI honest about that.
@@ -80,10 +129,25 @@ export default function Chat({
           emptyHint={emptyHint}
         />
 
-        <MessageComposer onSend={send} disabled={!id} placeholder={placeholder} />
+        <MessageComposer
+          onSend={send}
+          onSchedule={id ? requestSchedule : undefined}
+          disabled={!id}
+          placeholder={placeholder}
+        />
       </main>
 
       {aside}
+
+      {scheduling && (
+        <ScheduleMessage
+          target={{ kind, id }}
+          title={title}
+          draft={draft}
+          onScheduled={scheduled}
+          onClose={closeSchedule}
+        />
+      )}
     </div>
   );
 }

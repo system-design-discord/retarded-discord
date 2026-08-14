@@ -18,11 +18,14 @@ somebody writes another one, `F-00` has been undone. Add a prop instead.
 | `primitives/Timestamp.jsx` | The single date-formatting rule: a clock time today, a date as well when older. |
 | `primitives/MessageBubble.jsx` | Author, time, text, the `(edited)` marker, attached media, and the inline edit form. |
 | `primitives/MessageList.jsx` | The scroll container and the three states a list actually has — loading, empty, populated. |
-| `primitives/MessageComposer.jsx` | Send and clear, and clear **only** once the server accepted it. |
+| `primitives/MessageComposer.jsx` | Send and clear, and clear **only** once the server accepted it. Optional `onSchedule` adds the clock button. |
+| `ScheduleMessage.jsx` | `U-12`'s modal — pick a time, list what is pending, cancel one. |
 | `primitives/EmptyState.jsx` | The shared "nothing here yet" block. |
 | `../layout/NavSidebar.jsx` | The seven-link navigation, written once. |
 | `../../hooks/useConversation.js` | Load, send, edit and delete one conversation. |
-| `../../services/messages.js` | The only file that knows the message API's field names. |
+| `../../services/messages.js` | The only file that knows the message API's field names; exports `targetFor` / `targetOf`. |
+| `../../services/scheduling.js` | The scheduled-message endpoints, and the `datetime-local` ↔ ISO conversion. |
+| `../../hooks/useScheduledMessages.js` | The pending list and the two writes, plus `pendingFor`. |
 | `../../lib/pagination.js` | `unwrapList` and `fetchAllPages`. |
 
 ## Three traps, all of which have cost this project time
@@ -49,6 +52,25 @@ Whether the caller may edit or delete is **not** decided here. `roles.services` 
 not offer a control the server will refuse — hiding one changes nothing about what the API allows,
 and the hook surfaces the server's 403 rather than swallowing it.
 
+## Scheduling
+
+`U-12`, US-B2.1. `MessageComposer` takes an optional `onSchedule`; `Chat.jsx` passes one built from
+the target it already holds, so the direct-message, group and topic views all gained the clock
+button in one change and none of them mentions scheduling. That is the one rule above, applied: a
+second scheduler written into one screen would have undone `F-00`.
+
+The composer awaits `onSchedule` and clears its draft only if the answer is truthy — the same rule
+it applies to a send, so a refused schedule leaves the text where the writer can fix it. Because the
+modal resolves whenever it is closed rather than when it is opened, `Chat.jsx` parks the promise in
+a ref and settles it from `onSettled`, with an unmount cleanup that resolves `false` so a closed tab
+cannot leave the button disabled forever.
+
+**Nothing delivers a scheduled message yet.** `SC-02` landed the API and `SC-01` the Celery
+containers, but `SC-03` — the beat task that flips `is_delivered` — is unwritten, so a scheduled
+message is stored and sits there. The modal says so in an amber notice held in one constant, and a
+row whose time has passed is marked *overdue*, because that is the visible symptom and an
+unlabelled one reads as a bug. Delete the constant when `SC-03` lands.
+
 ## Known limitations
 
 - **The direct-message conversation list is derived on the client.** There is no `conversations/`
@@ -57,6 +79,13 @@ and the hook surfaces the server's 403 rather than swallowing it.
 - **`messages/` returns `sender` nested but `recipient` as a bare id**, so a correspondent's username
   is unknown until they reply. The screen fills the gap with `profile/<id>/`, one call per unnamed
   partner.
+- **A pending scheduled message is invisible in its conversation, its author's included.**
+  `Message.objects.visible_to` filters `is_delivered=True`, which is what keeps an unreleased
+  message out of every view rather than leaving each one to remember. `messages/scheduled/` is the
+  only way to see one, which is why the pending list lives inside the modal.
+- **The "N scheduled elsewhere" rows are labelled by kind, not by name.** The scheduled list returns
+  bare target ids, and resolving a topic's name would need the channel list plus its topics. Saying
+  *a channel topic* is less useful than a title and more honest than inventing one.
 - **The poll is still there, as a fallback.** `F-07` landed the socket, so a connected conversation
   receives a message the moment it is written and the header says *Live*. `useConversation.js` keeps
   polling underneath at thirty seconds while connected and five while not, because a Redis outage

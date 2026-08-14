@@ -1,4 +1,4 @@
-"""Fan a newly created message out to the sockets watching its conversation.
+"""Fan what just happened out to the sockets that care about it.
 
 **This is the whole reason `common/events.py` exists.** `messaging` publishes
 `MESSAGE_CREATED` and does not know who is listening; `notifications` subscribed
@@ -23,7 +23,7 @@ import logging
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
-from .groups import group_for_message
+from .groups import group_for_message, user_group
 
 logger = logging.getLogger(__name__)
 
@@ -53,5 +53,36 @@ def on_message_created(message, **_):
             # `type` of "message.created" into a call to `message_created`.
             'type': 'message.created',
             'message': MessageSerializer(message).data,
+        },
+    )
+
+
+def on_notification_created(user_id, payload, **_):
+    """Subscriber for `common.events.NOTIFICATION_CREATED` — RT-03, US-B1.2.
+
+    Shorter than its sibling above, and the difference is the whole point of
+    the card. `on_message_created` imports `MessageSerializer` and renders the
+    row itself; this one cannot, because `realtime` importing `notifications`
+    would break the peer rule both modules are held to and
+    `tests/test_decoupling.py` would fail. So `notifications.services` hands
+    over an already-serialized `payload` and the gateway forwards bytes whose
+    shape it never has to know.
+
+    The recipient is addressed directly rather than through a conversation:
+    a notification belongs to exactly one person, and `user_group` is the only
+    group their sockets are in. Nobody else's socket is in it, which is how
+    "a recipient receives only their own" holds without a check here.
+    """
+    layer = get_channel_layer()
+    if layer is None:
+        return
+
+    async_to_sync(layer.group_send)(
+        user_group(user_id),
+        {
+            # Channels turns a `type` of "notification.created" into a call to
+            # `notification_created` on NotificationConsumer.
+            'type': 'notification.created',
+            'notification': payload,
         },
     )

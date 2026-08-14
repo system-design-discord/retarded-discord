@@ -11,6 +11,15 @@
 // roles-specific. `services/channels.js` needs the same reader and a second copy
 // would drift, so it moved here; `roles.js` keeps the old name as an alias so
 // its callers are unchanged.
+//
+// `error` joined `detail` and `non_field_errors` when `U-10` arrived.
+// `groups_app` hand-rolls its refusals as `{"error": "..."}` where everything
+// routed through `roles` answers `{"detail": "..."}`, and `accounts`' privacy
+// view does the same. Without it the group screens render *"error: تنها ادمین
+// گروه…"* — a field name in front of a sentence, naming a field that does not
+// exist. Normalising it in `services/groups.js` instead would have meant either
+// rewriting an axios error in flight or catching inside a service, and the
+// service layer's rule is that errors propagate.
 
 export function readApiError(error, fallback) {
   const data = error?.response?.data;
@@ -19,7 +28,8 @@ export function readApiError(error, fallback) {
 
   const messages = Object.entries(data).flatMap(([field, value]) => {
     const texts = Array.isArray(value) ? value : [String(value)];
-    return texts.map((text) => (field === 'detail' || field === 'non_field_errors' ? text : `${field}: ${text}`));
+    const anonymous = field === 'detail' || field === 'non_field_errors' || field === 'error';
+    return texts.map((text) => (anonymous ? text : `${field}: ${text}`));
   });
 
   return messages.length > 0 ? messages.join('\n') : fallback;

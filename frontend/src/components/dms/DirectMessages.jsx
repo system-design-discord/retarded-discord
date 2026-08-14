@@ -1,9 +1,8 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import api from '../../services/api';
 import { listDirectMessages } from '../../services/messages';
+import { searchUsers } from '../../services/users';
 import { conversationsFrom, nameMissingPartners } from '../../hooks/useRecentChats';
-import { unwrapList } from '../../lib/pagination';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
 import Chat from '../chat/Chat';
@@ -80,7 +79,7 @@ export default function DirectMessages() {
 
     setSearching(true);
     try {
-      setCandidates(unwrapList(await api.get('users/', { params: { search: term } })));
+      setCandidates(await searchUsers(term));
     } catch {
       setCandidates([]);
       setError('The user search could not be completed.');

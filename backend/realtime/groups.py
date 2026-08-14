@@ -29,6 +29,17 @@ def topic_group(topic_id):
     return f'topic.{int(topic_id)}'
 
 
+def user_group(user_id):
+    """Every socket one person has open, and nobody else's.
+
+    `RT-03` fans a notification out to its recipient alone, so the group is the
+    recipient rather than a conversation. One person may have several tabs open
+    and each is a separate socket in the same group, which is what makes "the
+    badge updates everywhere" true without the gateway tracking sessions.
+    """
+    return f'user.{int(user_id)}'
+
+
 def group_for_message(message):
     """The group a newly created message should be fanned out to.
 

@@ -1,24 +1,28 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../services/api';
 
-// F-07 — the client for the gateway `RT-02` landed. US-B1.1.
+// The gateway's client, and the only file in the SPA that knows a WebSocket
+// exists. `hooks/useConversation.js` and `hooks/useNotifications.js` call it and
+// stay hooks about messages and notifications, exactly as `services/messages.js`
+// is the only file that knows the REST shape.
 //
-// The server side has been real since Aug 11 and nothing in the browser opened
-// a socket, so the SPA polled every five seconds. This is the file that closes
-// that gap, and it is deliberately the *only* file in the SPA that knows a
-// WebSocket exists: `hooks/useConversation.js` calls it and stays a hook about
-// messages, exactly as `services/messages.js` is the only file that knows the
-// REST shape.
+// **Every socket here is delivery only.** `realtime/consumers.py` answers
+// anything sent up one with an error naming the endpoint that does the write,
+// so this file never writes. One write path, one place that validates.
 //
-// **The socket is delivery only.** `realtime/consumers.py` answers anything sent
-// up it with an error telling you to POST instead, so this file never writes.
-// Sending stays `services/messages.js`. One write path, one place that validates.
+// `F-07` landed this for conversations (US-B1.1) and `F-08` added the fourth
+// route for notifications (US-B1.2). The reconnect machinery below was written
+// once for the first and is shared by the second: `openSocket` owns the token,
+// the backoff and the close codes, and the two exported openers are the routes
+// and the frames they care about. A second copy of the retry logic would drift,
+// and the half that drifted would be the one nobody was watching.
 //
-// The three routes mirror messaging's three targets: `ws/dm/<user_id>/`,
-// `ws/group/<group_id>/`, `ws/topic/<topic_id>/`, each with `?token=<access>`.
-// The token is in the query string because a browser's `WebSocket` constructor
-// cannot set an `Authorization` header — `realtime/middleware.py` explains the
-// trade that forces.
+//     ws/dm/<user_id>/      ws/group/<group_id>/
+//     ws/topic/<topic_id>/  ws/notifications/
+//
+// each with `?token=<access>`. The token is in the query string because a
+// browser's `WebSocket` constructor cannot set an `Authorization` header —
+// `realtime/middleware.py` explains the trade that forces.
 
 /** The close codes `realtime/consumers.py` documents. */
 const CLOSE_UNAUTHENTICATED = 4401;
@@ -80,18 +84,24 @@ async function refreshAccessToken() {
 }
 
 /**
- * Open a live socket for one conversation.
+ * A reconnecting socket on one gateway path.
+ *
+ * Handles the token, the backoff, the close codes and the `subscribed`
+ * handshake; knows nothing about what the frames mean. Callers get every frame
+ * that is not `subscribed` and pick out the one they want.
  *
  * @param {object} options
- * @param {'dm'|'group'|'topic'} options.kind   which of messaging's three targets
- * @param {number|string} options.id            the target's id
- * @param {(message: object) => void} options.onMessage  a `message.created` payload
- *   — `MessageSerializer` output, the same shape `services/messages.js` returns
+ * @param {string} options.path                 e.g. `/ws/dm/2/` or `/ws/notifications/`
+ * @param {(frame: object) => void} options.onFrame        a parsed frame
  * @param {(status: string, detail?: string) => void} [options.onStatus]
- *   one of `connecting` | `live` | `retrying` | `stopped`
+ *   one of `connecting` | `live` | `retrying` | `stopped`. `live` fires on every
+ *   successful (re)subscribe, not just the first — which is what lets a caller
+ *   re-read whatever it missed while the socket was down.
+ * @param {Record<number, string>} [options.refusals]
+ *   close codes that retrying cannot fix, and what to say about them
  * @returns {{ close: () => void }} closing is idempotent and stops all retries
  */
-export function openConversationSocket({ kind, id, onMessage, onStatus }) {
+export function openSocket({ path, onFrame, onStatus, refusals = {} }) {
   let socket = null;
   let timer = null;
   let attempt = 0;
@@ -125,7 +135,7 @@ export function openConversationSocket({ kind, id, onMessage, onStatus }) {
     }
 
     report('connecting');
-    socket = new WebSocket(`${wsBase()}/ws/${kind}/${id}/?token=${encodeURIComponent(token)}`);
+    socket = new WebSocket(`${wsBase()}${path}?token=${encodeURIComponent(token)}`);
 
     socket.onmessage = (event) => {
       let frame;
@@ -134,17 +144,17 @@ export function openConversationSocket({ kind, id, onMessage, onStatus }) {
       } catch {
         return;
       }
-      // `subscribed` confirms the join and `error` is the gateway declining a
-      // write; only a created message is this file's business. The consumer
-      // sends `subscribed` after `accept()`, so the *frame* is the signal the
-      // subscription is real — `onopen` only means the handshake completed.
+      // The consumer sends `subscribed` after `accept()`, so the *frame* is the
+      // signal the subscription is real — `onopen` only means the handshake
+      // completed. Everything else is the caller's business, including the
+      // gateway's `error` reply to a write it declined.
       if (frame.type === 'subscribed') {
         attempt = 0;
         refreshed = false;
         report('live');
-      } else if (frame.type === 'message.created' && frame.message) {
-        onMessage?.(frame.message);
+        return;
       }
+      onFrame?.(frame);
     };
 
     socket.onclose = async (event) => {
@@ -153,12 +163,8 @@ export function openConversationSocket({ kind, id, onMessage, onStatus }) {
 
       // Refusals that retrying cannot fix. Reconnecting into a 4403 forever is
       // a client hammering an endpoint that has already given its final answer.
-      if (event.code === CLOSE_FORBIDDEN) {
-        stop('You are not a member of this conversation.');
-        return;
-      }
-      if (event.code === CLOSE_NOT_FOUND) {
-        stop('This conversation no longer exists.');
+      if (refusals[event.code]) {
+        stop(refusals[event.code]);
         return;
       }
 
@@ -215,6 +221,58 @@ export function openConversationSocket({ kind, id, onMessage, onStatus }) {
       }
     },
   };
+}
+
+/**
+ * Open a live socket for one conversation. F-07, US-B1.1.
+ *
+ * @param {object} options
+ * @param {'dm'|'group'|'topic'} options.kind   which of messaging's three targets
+ * @param {number|string} options.id            the target's id
+ * @param {(message: object) => void} options.onMessage  a `message.created` payload
+ *   — `MessageSerializer` output, the same shape `services/messages.js` returns
+ * @param {(status: string, detail?: string) => void} [options.onStatus]
+ * @returns {{ close: () => void }}
+ */
+export function openConversationSocket({ kind, id, onMessage, onStatus }) {
+  return openSocket({
+    path: `/ws/${kind}/${id}/`,
+    onStatus,
+    refusals: {
+      [CLOSE_FORBIDDEN]: 'You are not a member of this conversation.',
+      [CLOSE_NOT_FOUND]: 'This conversation no longer exists.',
+    },
+    onFrame: (frame) => {
+      if (frame.type === 'message.created' && frame.message) onMessage?.(frame.message);
+    },
+  });
+}
+
+/**
+ * Open the caller's notification socket. F-08, US-B1.2.
+ *
+ * No id: the route is scoped to whoever the token says you are, so there is
+ * nothing to address and nothing to be refused for. `4403` and `4404` cannot
+ * happen here, which is why no `refusals` are passed — an unexpected close is
+ * a dropped connection and reconnecting is the right answer to it.
+ *
+ * @param {object} options
+ * @param {(notification: object) => void} options.onNotification
+ *   a `notification.created` payload — `NotificationSerializer` output, the
+ *   same shape `services/notifications.js` returns
+ * @param {(status: string, detail?: string) => void} [options.onStatus]
+ * @returns {{ close: () => void }}
+ */
+export function openNotificationSocket({ onNotification, onStatus }) {
+  return openSocket({
+    path: '/ws/notifications/',
+    onStatus,
+    onFrame: (frame) => {
+      if (frame.type === 'notification.created' && frame.notification) {
+        onNotification?.(frame.notification);
+      }
+    },
+  });
 }
 
 export default openConversationSocket;

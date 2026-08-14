@@ -22,3 +22,4 @@ class RealtimeConfig(AppConfig):
         from . import publisher
 
         events.subscribe(events.MESSAGE_CREATED, publisher.on_message_created)
+        events.subscribe(events.NOTIFICATION_CREATED, publisher.on_notification_created)
