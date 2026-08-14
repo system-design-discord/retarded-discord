@@ -27,6 +27,12 @@ Two differences are recorded rather than fixed, both in execution-plan.md:
   `ChannelMember.joined_at` are not in the ERD. They carry no relationship and
   remove no column, so they are recorded here and left in place — the ERD is a
   data model, not a column-by-column DDL.
+* **Deviation 26 — `Channel.media_restricted`.** `A-10` / US-7.3 needs somewhere
+  to record that a channel restricts media, and US-2.4 puts that restriction on
+  the channel rather than the topic. `ERD.tex` has no such column, so the
+  expected field set below is widened to match the model and the divergence is
+  recorded in the execution plan rather than left for `INT-3` to find. Like the
+  timestamps it is additive: it carries no relationship and removes no column.
 """
 
 import pytest
@@ -54,7 +60,11 @@ def constraint_names(model):
 
 
 def test_channel_matches_the_erd():
-    assert concrete_fields(Channel) == {'id', 'owner', 'name', 'description', 'avatar'}
+    # `media_restricted` is the A-10 / US-7.3 addition of deviation 26 — see the
+    # module docstring. Everything else is the ERD's Channel exactly.
+    assert concrete_fields(Channel) == {
+        'id', 'owner', 'name', 'description', 'avatar', 'media_restricted',
+    }
 
 
 def test_topic_matches_the_erd():
