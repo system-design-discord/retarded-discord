@@ -57,7 +57,27 @@ and the hook surfaces the server's 403 rather than swallowing it.
 - **`messages/` returns `sender` nested but `recipient` as a bare id**, so a correspondent's username
   is unknown until they reply. The screen fills the gap with `profile/<id>/`, one call per unnamed
   partner.
-- **New messages arrive by a 5-second poll, not a socket.** Live delivery is `F-07`, which was cut at
-  the Aug 11 bonus gate. The poll is named as a poll in `useConversation.js` and does not pretend
-  otherwise.
-- **`ChannelsDashboard.jsx` does not use any of this yet.** That is `F-04` and `F-05`.
+- **The poll is still there, as a fallback.** `F-07` landed the socket, so a connected conversation
+  receives a message the moment it is written and the header says *Live*. `useConversation.js` keeps
+  polling underneath at thirty seconds while connected and five while not, because a Redis outage
+  makes `realtime/publisher.py` log and skip and a proxy that drops `Upgrade` never completes the
+  handshake — in both cases messages arrive late rather than not at all. The header says *Polling*
+  when that is what is happening, so the two states are never confused at a demo.
+
+## Who calls this
+
+Four screens, one implementation: `dms/DirectMessages.jsx` (`kind="dm"`), `groups/GroupChat.jsx`
+(`kind="group"`), and `channels/ChannelView.jsx` (`kind="topic"`), which `F-05` added as the fourth
+caller rather than a third chat. `channels/ChannelsDashboard.jsx` is the channel *list* and links
+into the third of those; it no longer renders messages itself.
+
+## Live delivery
+
+`lib/socket.js` is the only file in the SPA that knows a WebSocket exists, the same way
+`services/messages.js` is the only one that knows the REST shape. `useConversation` opens one socket
+per conversation and closes it on unmount; `openConversationSocket` handles the reconnect,
+the exponential backoff with jitter, and the single token refresh a `4401` earns. It never writes —
+`realtime/consumers.py` is delivery only and answers anything sent up it with an error naming
+`POST /api/messages/`. Two rules in the hook are load-bearing: messages are **deduped by id**,
+because a direct message's channel-layer group is symmetric and fans back to its own sender, and
+they are **re-sorted by `created_at`**, because a frame can arrive after a later one.
