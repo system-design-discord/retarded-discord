@@ -1,32 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useContext, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import CreateGroupModal from './CreateGroupModal';
-import api from '../../services/api';
+import useGroups from '../../hooks/useGroups';
+import { isGroupAdmin } from '../../services/groups';
+import { AuthContext } from '../../context/AuthContext';
+import { EmptyState } from '../chat/primitives';
 
-const GroupsDashboard = () => {
+// US-5.1 — the groups you belong to, and the way into each one.
+//
+// This screen showed "No Groups Yet" to everybody, always. It read the
+// paginated body as an array, so `groups.length` was `undefined` and the empty
+// state was the only branch it could reach — issue #77's last survivor. The fix
+// is not a line here but `useGroups`, which goes through `lib/pagination`.
+//
+// Three fields it rendered do not exist on `GroupSerializer` either:
+// `group.title`, `group.lastMessage` and `group.memberCount`. A group has
+// `name`, `description` and a nested `members`, so that is what is shown.
+//
+// The navigation rail is still this file's own copy rather than `NavSidebar`.
+// That is `U-13`'s card — six screens carry it — and swapping it here would be
+// a tempting forty-line deletion in a diff that is about the group API.
+
+export default function GroupsDashboard() {
   const navigate = useNavigate();
-  const [groups, setGroups] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { user } = useContext(AuthContext);
+  const { groups, loading, error, setError, create } = useGroups();
   const [showModal, setShowModal] = useState(false);
-
-  // Fetch only the groups this user belongs to
-  useEffect(() => {
-    const fetchGroups = async () => {
-      try {
-        const response = await api.get('groups/');
-        setGroups(response.data);
-      } catch (err) {
-        console.error("Failed to fetch groups", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchGroups();
-  }, []);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
-      {/* Navigation - Upgraded to Links and standardized emojis */}
+      {/* U-13 owns this: it is the seventh copy of NavSidebar's links. */}
       <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-2">
         <div className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Navigation</div>
         <Link to="/dashboard" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
@@ -52,67 +55,105 @@ const GroupsDashboard = () => {
         </Link>
       </aside>
 
-      {/* Main Groups Panel */}
-      <main className="flex-1 p-8 overflow-y-auto">
+      <main className="flex-1 min-w-0 p-8 overflow-y-auto">
         <div className="max-w-4xl mx-auto space-y-6">
-          <div className="flex justify-between items-center">
-            <div>
+          <div className="flex justify-between items-center gap-4">
+            <div className="min-w-0">
               <h1 className="text-2xl font-extrabold text-white">Your Groups</h1>
-              <p className="text-slate-400 text-sm mt-1">Manage and participate in private group conversations.</p>
+              <p className="text-slate-400 text-sm mt-1">
+                Manage and participate in private group conversations.
+              </p>
             </div>
             <button
+              type="button"
               onClick={() => setShowModal(true)}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2.5 rounded-xl transition cursor-pointer shadow-lg shadow-indigo-600/20"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2.5 rounded-xl transition cursor-pointer shadow-lg shadow-indigo-600/20 shrink-0"
             >
               + New Group
             </button>
           </div>
 
-          {isLoading ? (
+          {error && (
+            <div className="rounded-xl border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200 whitespace-pre-line">
+              {error}
+              <button
+                type="button"
+                onClick={() => setError('')}
+                className="ml-3 text-xs underline cursor-pointer"
+              >
+                dismiss
+              </button>
+            </div>
+          )}
+
+          {loading ? (
             <div className="text-center py-10 text-slate-500">Loading your groups...</div>
           ) : groups.length > 0 ? (
             <div className="grid gap-4">
-              {groups.map(group => (
-                <div
-                  key={group.id}
-                  onClick={() => navigate(`/chat/${group.id}`)}
-                  className="p-5 bg-slate-900 border border-slate-800/80 hover:border-indigo-500/50 hover:bg-slate-800/60 rounded-2xl transition cursor-pointer flex justify-between items-center group"
-                >
-                  <div>
-                    <h3 className="text-base font-bold text-slate-200 group-hover:text-indigo-400 transition">
-                      {group.name || group.title}
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-1">
-                      {group.lastMessage || 'No messages yet.'}
-                    </p>
+              {groups.map((group) => {
+                const members = group.members?.length ?? 0;
+
+                return (
+                  <div
+                    key={group.id}
+                    className="p-5 bg-slate-900 border border-slate-800/80 hover:border-indigo-500/50 rounded-2xl transition flex justify-between items-center gap-4 group"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/groups/${group.id}/chat`)}
+                      className="flex-1 min-w-0 text-left cursor-pointer"
+                    >
+                      <h3 className="text-base font-bold text-slate-200 group-hover:text-indigo-400 transition truncate">
+                        {group.name}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1 truncate">
+                        {group.description || 'No description.'}
+                      </p>
+                    </button>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-full">
+                        {members} {members === 1 ? 'Member' : 'Members'}
+                      </span>
+                      {/* Offered to the admin only. Hiding it is a courtesy —
+                          the server refuses everyone else either way. */}
+                      {isGroupAdmin(group, user) && (
+                        <Link
+                          to={`/groups/${group.id}/settings`}
+                          className="text-xs text-slate-400 hover:text-indigo-400 transition cursor-pointer"
+                        >
+                          ⚙️ Settings
+                        </Link>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-full">
-                    {group.memberCount || group.members?.length || 1} Members
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            /* Acceptance Criteria: Empty state is handled */
-            <div className="text-center py-16 bg-slate-900 border border-slate-800 rounded-2xl">
-              <div className="text-4xl mb-4">👥</div>
-              <h3 className="text-lg font-bold text-slate-200 mb-2">No Groups Yet</h3>
-              <p className="text-slate-400 text-sm max-w-sm mx-auto">
-                You haven't joined any groups. Create a new group to start chatting with your teammates.
-              </p>
+            <div className="py-16 border border-slate-800 rounded-2xl bg-slate-900">
+              <EmptyState
+                icon="👥"
+                title="No groups yet"
+                hint="Create one to start a conversation with several people at once."
+              />
             </div>
           )}
         </div>
 
         {showModal && (
-  <CreateGroupModal 
-    onClose={() => setShowModal(false)} 
-    onGroupCreated={(newGroup) => setGroups(prevGroups => [newGroup, ...prevGroups])} 
-  />
-)}
+          <CreateGroupModal
+            onClose={() => setShowModal(false)}
+            onCreate={async (body) => {
+              const created = await create(body);
+              // Land where members are actually added, rather than in a group
+              // whose only member is the person who just made it.
+              if (created) navigate(`/groups/${created.id}/settings`);
+              return created;
+            }}
+          />
+        )}
       </main>
     </div>
   );
-};
-
-export default GroupsDashboard;
+}
