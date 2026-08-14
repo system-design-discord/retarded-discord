@@ -23,8 +23,8 @@ import { readApiError } from '../lib/apiError';
 //   * a non-admin trying either, with the UI bypassed or not.
 //
 // **Re-reading after every write is not caution, it is correctness.** Adding a
-// user who is already a member answers 200 `"کاربر X به گروه اضافه شد."` having
-// written no row at all. A screen that trusted that reply would show a member
+// user who is already a member answers 200 `"User X was added to the group."`
+// having written no row at all. A screen that trusted that reply would show a member
 // list the server does not have — which is the acceptance criterion this card
 // is graded on, inverted.
 //
