@@ -218,22 +218,32 @@ Who may delete one is `roles.services.may_delete_message`, and it depends on whe
 
 ### Real time
 
-**Bonus, server side only.** `RT-01` put the channel layer on Redis and `RT-02` replaced the
+**Bonus, and complete end to end.** `RT-01` put the channel layer on Redis and `RT-02` replaced the
 WebSocket consumer, which used to take the sender's identity from the client's JSON payload — so
 anyone could post as anyone — and wrote straight to the database, bypassing every check the REST
-path makes.
+path makes. `F-07` is its client, `RT-03` added notifications and `F-08` is theirs.
 
     ws://<host>/ws/dm/<user_id>/?token=<access>
     ws://<host>/ws/group/<group_id>/?token=<access>
     ws://<host>/ws/topic/<topic_id>/?token=<access>
+    ws://<host>/ws/notifications/?token=<access>
 
-The socket is **delivery only**: messages are written with `POST /api/messages/` and pushed from
-`common.events.MESSAGE_CREATED`, so there is still exactly one write path. Identity is the JWT's,
-membership is `roles.services`' answer, and a refusal is `4401` (no/bad token), `4403` (not in this
-conversation) or `4404` (no such conversation).
+Every socket is **delivery only**: messages are written with `POST /api/messages/` and pushed from
+`common.events.MESSAGE_CREATED`, notifications are written by `notifications.services` and pushed
+from `NOTIFICATION_CREATED`, so there is still exactly one write path for each. Identity is the
+JWT's, membership is `roles.services`' answer, and a refusal is `4401` (no/bad token), `4403` (not
+in this conversation) or `4404` (no such conversation).
 
-**Nothing in the SPA opens one yet** — `F-07`, the client, was cut at the Aug 11 bonus gate, so new
-messages still arrive by a five-second poll. `backend/realtime/README.md` is the detail.
+The notification route takes **no id** — a notification belongs to one person and that person is
+whoever the token says you are — and it is addressed to a per-user channel-layer group, so a
+recipient receives only their own without any check on arrival. `notifications` and `realtime` do
+not import each other in either direction, which is why the payload is serialized by the module that
+owns it and forwarded by the one that does not; an AST test asserts both directions.
+
+In the SPA, `frontend/src/lib/socket.js` is the only file that knows a WebSocket exists.
+Conversations keep a poll underneath as a fallback (thirty seconds while connected, five while not);
+the notification list re-reads on every reconnect and merges arrivals by id, so a dropped connection
+loses nothing and duplicates nothing. `backend/realtime/README.md` is the detail.
 
 ### Scheduled messages
 
@@ -250,9 +260,15 @@ the author's included — until it is released. Posting into a group or a topic 
 membership exactly as `POST /api/messages/` does, so scheduling cannot be used to reach a
 conversation you could not write to now.
 
+`U-12` added the UI: the clock button on every conversation's composer opens a modal that picks a
+time, lists what is pending and cancels one. It refuses a past time before the request as well as
+after it.
+
 **The dispatcher does not exist yet.** There is no `scheduling/tasks.py` and no beat schedule, so
 the worker starts with an empty task list and a scheduled message is stored and never sent. That is
-`SC-03`. The two Celery containers running is not evidence to the contrary.
+`SC-03`, whose issue was closed on Aug 14 **without the code being written**. The two Celery
+containers running is not evidence to the contrary, which is exactly why the composer carries a
+notice saying so and marks a row whose time has passed as *overdue*.
 
 ### The chat surface
 
