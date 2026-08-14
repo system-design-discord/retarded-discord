@@ -21,3 +21,6 @@ pillow==12.3.0
 
 # Browser calls from the Vite dev server; production is single-origin behind nginx.
 django-cors-headers==4.9.0
+
+# Background jobs and scheduled-message dispatch (SC-01).
+celery==5.6.3

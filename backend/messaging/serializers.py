@@ -21,9 +21,16 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sender', 'recipient', 'group', 'topic',
             'text', 'media', 'media_id', 'created_at', 'is_read',
-            'is_edited', 'edited_at',
+            'is_edited', 'edited_at', 'scheduled_at', 'is_delivered',
         ]
-        read_only_fields = ['id', 'sender', 'created_at', 'is_read', 'is_edited', 'edited_at']
+        # `scheduled_at` is read-only *here* and writable only through
+        # `scheduling.ScheduledMessageSerializer`, which re-opens it: posting to
+        # /api/messages/ sends now, and scheduling is a different endpoint
+        # rather than a flag on this one.
+        read_only_fields = [
+            'id', 'sender', 'created_at', 'is_read', 'is_edited', 'edited_at',
+            'scheduled_at', 'is_delivered',
+        ]
 
     def validate(self, attrs):
         """Exactly one target — US-2.1 (DM), US-2.2 (group), US-2.3 (topic).
@@ -62,6 +69,7 @@ class MessageEditSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sender', 'recipient', 'group', 'topic',
             'text', 'media', 'created_at', 'is_read', 'is_edited', 'edited_at',
+            'scheduled_at', 'is_delivered',
         ]
         read_only_fields = [
             field for field in fields if field != 'text'

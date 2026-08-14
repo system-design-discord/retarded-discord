@@ -1,4 +1,6 @@
 from django.contrib.auth import get_user_model
+from django.db.models import Case, IntegerField, Value, When
+from django.db.models.functions import Lower
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status
 from rest_framework.permissions import AllowAny
@@ -20,23 +22,17 @@ User = get_user_model()
 
 
 class UserDirectoryView(generics.ListAPIView):
-    """PLACEHOLDER — card A-11 owns the real one, issue #90.
+    """Search the public user directory by username — A-11 (#90).
 
-    `F-03` needs some way to name another user, and the API offers none: the
-    only lookup is `profile/<int:user_id>/`, which wants the id you are trying
-    to find. Without this a freshly registered account cannot start a
-    conversation with anybody, so US-2.1 is not demonstrable from a clean clone.
+    The direct-message picker only needs an id and username, so the endpoint
+    deliberately uses ``PublicUserSerializer`` and never exposes email or
+    profile privacy fields. A search term is required in practice: an omitted
+    or whitespace-only term returns an empty page rather than enumerating the
+    account table.
 
-    This is the smallest thing that unblocks that view, not a finished endpoint.
-    It reads through `PublicUserSerializer`, so nothing private can leak out of
-    it, and a blank term answers nothing rather than dumping the user table —
-    the same choice `M-08`'s search makes.
-
-    TODO(A-11): honour a discoverability preference rather than listing every
-    account, decide what a blank term should mean, order by something a human
-    would expect rather than alphabetically, and cover all of it with tests.
-    There are none, deliberately: a stub with a passing test suite reads as
-    finished work.
+    Results exclude the caller and inactive accounts. Exact username matches
+    rank first, prefix matches second, and remaining substring matches last;
+    ties are ordered case-insensitively by username for deterministic output.
     """
 
     serializer_class = PublicUserSerializer
@@ -49,9 +45,18 @@ class UserDirectoryView(generics.ListAPIView):
 
         return (
             User.objects
+            .filter(is_active=True, username__icontains=term)
             .exclude(pk=self.request.user.pk)
-            .filter(username__icontains=term)
-            .order_by('username')
+            .annotate(
+                search_rank=Case(
+                    When(username__iexact=term, then=Value(0)),
+                    When(username__istartswith=term, then=Value(1)),
+                    default=Value(2),
+                    output_field=IntegerField(),
+                ),
+                username_lower=Lower('username'),
+            )
+            .order_by('search_rank', 'username_lower', 'pk')
         )
 
 
@@ -152,6 +157,12 @@ class PrivacySettingsView(APIView):
         if allow_invites is not None:
             profile.allow_invites = allow_invites
             profile.save()
-            return Response({"success": True, "allow_invites": profile.allow_invites}, status=status.HTTP_200_OK)
+            return Response(
+                {"success": True, "allow_invites": profile.allow_invites},
+                status=status.HTTP_200_OK,
+            )
 
-        return Response({"error": "مقدار نامعتبر است"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "مقدار نامعتبر است"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )

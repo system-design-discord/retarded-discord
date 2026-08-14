@@ -212,3 +212,17 @@ CORS_ALLOWED_ORIGINS = env_list(
     'http://localhost:5173,http://127.0.0.1:5173',
 )
 CORS_ALLOW_CREDENTIALS = True
+
+
+# Background jobs — SC-01. RabbitMQ is the broker; task results are not stored
+# because scheduling only needs reliable execution, not result retrieval.
+CELERY_BROKER_URL = os.environ.get(
+    'CELERY_BROKER_URL',
+    'amqp://discord:discord@rabbitmq:5672//',
+)
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True

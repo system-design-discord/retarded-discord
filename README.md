@@ -133,7 +133,7 @@ backend/          Django 6 + DRF + Channels, PostgreSQL
   media_app/        MediaFile
   notifications/    Notification
   realtime/         WebSocket consumers
-  scheduling/       scheduled messages, background jobs
+  scheduling/       scheduled-message API; Celery app in config/
 frontend/         React 19 + Vite SPA
   src/components/   one directory per screen family
     chat/             the conversation view and its primitives
@@ -234,6 +234,25 @@ conversation) or `4404` (no such conversation).
 
 **Nothing in the SPA opens one yet** — `F-07`, the client, was cut at the Aug 11 bonus gate, so new
 messages still arrive by a five-second poll. `backend/realtime/README.md` is the detail.
+
+### Scheduled messages
+
+**Bonus, server side, and deliberately unfinished.** `SC-01` wired Celery to a RabbitMQ broker and
+added the `celery_worker` and `celery_beat` services to compose; `SC-02` added the API:
+
+    POST   /api/messages/schedule/          a message plus a future scheduled_at
+    GET    /api/messages/scheduled/         the caller's pending schedules
+    DELETE /api/messages/scheduled/<id>/cancel/
+
+A scheduled message is an ordinary `Message` row carrying `scheduled_at` and `is_delivered=False`.
+`Message.objects.visible_to` filters on `is_delivered`, so it stays out of every conversation view —
+the author's included — until it is released. Posting into a group or a topic asks `roles` for
+membership exactly as `POST /api/messages/` does, so scheduling cannot be used to reach a
+conversation you could not write to now.
+
+**The dispatcher does not exist yet.** There is no `scheduling/tasks.py` and no beat schedule, so
+the worker starts with an empty task list and a scheduled message is stored and never sent. That is
+`SC-03`. The two Celery containers running is not evidence to the contrary.
 
 ### The chat surface
 

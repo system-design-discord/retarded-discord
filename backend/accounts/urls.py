@@ -19,7 +19,7 @@ urlpatterns = [
     path('auth/logout/', LogoutView.as_view(), name='logout'),
     path('auth/me/', MeView.as_view(), name='auth-me'),
 
-    # Placeholder, and A-11 (#90) owns finishing it — see the view's docstring.
+    # A-11 (#90): authenticated public user directory for starting DMs.
     path('users/', UserDirectoryView.as_view(), name='user-directory'),
 
     path('profile/', ProfileDetailView.as_view(), name='profile-detail'),
