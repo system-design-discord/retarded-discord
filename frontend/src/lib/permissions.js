@@ -70,6 +70,10 @@ export const PERMISSIONS = [
 // control that is silently never shown; a typo in an import does not build.
 export const CAN_CREATE_TOPIC = 'can_create_topic';
 
+// A-10's toggle is gated on the same key the server gates `PATCH channels/<id>/`
+// on, named here for the same reason as above.
+export const CAN_EDIT_CHANNEL = 'can_edit_channel';
+
 /** Just the keys, in model order. */
 export const PERMISSION_KEYS = PERMISSIONS.map((permission) => permission.key);
 
