@@ -139,6 +139,58 @@ class ConversationConsumer(AsyncWebsocketConsumer):
         }))
 
 
+class NotificationConsumer(AsyncWebsocketConsumer):
+    """One socket, one person's notifications — RT-03, US-B1.2.
+
+    The simplest consumer here, and the simplicity is load-bearing. A
+    conversation socket has to ask whether you may read *that* conversation,
+    which is why `_resolve` exists above. A notification socket has no such
+    question: a notification belongs to exactly one user, `user_group` names
+    only their sockets, and `notifications.services` addresses the group by the
+    recipient's own id. So "may I see this" is answered by *where the message
+    was sent*, not by a check on arrival — there is nothing to get wrong here
+    and nothing to delegate to `roles`.
+
+    It is delivery-only on the same terms as `ConversationConsumer`: marking a
+    notification read is `POST /api/notifications/<id>/read/` and stays there.
+    """
+
+    async def connect(self):
+        self.group_name = None
+
+        user = self.scope.get('user')
+        if user is None or not user.is_authenticated:
+            # Accept first, as above, so 4401 reaches the client instead of the
+            # browser's generic 1006.
+            await self.accept()
+            await self.close(code=CLOSE_UNAUTHENTICATED)
+            return
+
+        self.group_name = group_names.user_group(user.id)
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+        await self.send(text_data=json.dumps({'type': 'subscribed', 'notifications': True}))
+
+    async def disconnect(self, close_code):
+        if self.group_name:
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def receive(self, text_data=None, bytes_data=None):
+        await self.send(text_data=json.dumps({
+            'type': 'error',
+            'detail': 'This socket is delivery only. '
+                      'Mark notifications read with POST /api/notifications/<id>/read/.',
+        }))
+
+    async def notification_created(self, event):
+        """Handler for `common.events.NOTIFICATION_CREATED`, fanned out by
+        `realtime/publisher.py`. The name matches the `type` it sends."""
+        await self.send(text_data=json.dumps({
+            'type': 'notification.created',
+            'notification': event['notification'],
+        }))
+
+
 class UnknownRouteConsumer(AsyncWebsocketConsumer):
     """Anything that is not one of the three conversation routes.
 
@@ -153,7 +205,7 @@ class UnknownRouteConsumer(AsyncWebsocketConsumer):
         await self.accept()
         await self.send(text_data=json.dumps({
             'type': 'error',
-            'detail': 'Unknown conversation. Use /ws/dm/<user_id>/, /ws/group/<group_id>/ '
-                      'or /ws/topic/<topic_id>/ with ?token=<access>.',
+            'detail': 'Unknown route. Use /ws/dm/<user_id>/, /ws/group/<group_id>/, '
+                      '/ws/topic/<topic_id>/ or /ws/notifications/ with ?token=<access>.',
         }))
         await self.close(code=CLOSE_NOT_FOUND)

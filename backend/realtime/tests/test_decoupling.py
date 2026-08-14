@@ -56,8 +56,28 @@ def test_no_domain_module_imports_the_gateway(publisher):
 
 def test_the_gateway_does_not_import_notifications():
     """The two subscribers are peers. Either one importing the other would put
-    delivery order back into the code rather than in the seam."""
+    delivery order back into the code rather than in the seam.
+
+    `RT-03` is where this stopped being free. The gateway now pushes
+    notifications too, and the obvious way to write that — import
+    `NotificationSerializer` and render the row, exactly as `on_message_created`
+    imports `MessageSerializer` — is the one thing this assertion forbids. The
+    payload is serialized by `notifications.services` and travels on the event
+    instead, and this test is the reason.
+    """
     assert imports_of('realtime', 'notifications') == []
+
+
+def test_notifications_does_not_import_the_gateway():
+    """The other direction, which `RT-03`'s third criterion names explicitly.
+
+    `notifications` gained a publication in that card. Publishing is what the
+    seam is for; reaching for `realtime.publisher` to push directly would have
+    been half a line shorter and would have coupled the two bonus modules to
+    each other, so that a Redis problem in one became an import-time problem in
+    the other.
+    """
+    assert imports_of('notifications', 'realtime') == []
 
 
 def test_the_gateway_subscribes_to_message_created():
@@ -65,6 +85,16 @@ def test_the_gateway_subscribes_to_message_created():
     from realtime import publisher
 
     assert publisher.on_message_created in events._subscribers[events.MESSAGE_CREATED]
+
+
+def test_the_gateway_subscribes_to_notification_created():
+    """RT-03. Subscribed in `apps.ready()` beside the message handler — a
+    fan-out nobody registered fails silently, which is the failure mode the
+    seam is least able to report."""
+    from common import events
+    from realtime import publisher
+
+    assert publisher.on_notification_created in events._subscribers[events.NOTIFICATION_CREATED]
 
 
 OWNERSHIP_ATTRS = {'owner_id', 'owner', 'admin_id', 'admin', 'is_admin'}

@@ -16,6 +16,11 @@ websocket_urlpatterns = [
         r'^ws/(?P<kind>dm|group|topic)/(?P<target_id>\d+)/$',
         consumers.ConversationConsumer.as_asgi(),
     ),
+    # RT-03. No id in the path: a notification socket is scoped to whoever the
+    # token says you are, so naming a user here would be an invitation to read
+    # somebody else's. Listed before the catch-all below, which would otherwise
+    # swallow it.
+    re_path(r'^ws/notifications/$', consumers.NotificationConsumer.as_asgi()),
     # Last, and matching everything left: an unrouted WebSocket path makes
     # URLRouter raise, which Channels reports as a 500. A removed route should
     # refuse, not error.

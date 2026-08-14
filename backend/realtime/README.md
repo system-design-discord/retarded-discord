@@ -20,9 +20,14 @@ make `receive()` save something, stop: the REST endpoint is already there and al
     ws://<host>/ws/dm/<user_id>/?token=<access>
     ws://<host>/ws/group/<group_id>/?token=<access>
     ws://<host>/ws/topic/<topic_id>/?token=<access>
+    ws://<host>/ws/notifications/?token=<access>
 
-The three kinds mirror `messaging`'s three targets exactly, so a client that can name a conversation
+The first three mirror `messaging`'s three targets exactly, so a client that can name a conversation
 for the REST API can name it here.
+
+The fourth is `RT-03` and takes **no id**: a notification belongs to exactly one person, and that
+person is whoever the token says you are. Putting a user id in the path would be an invitation to
+ask for somebody else's.
 
 **Identity is `scope['user']`, never the payload.** The old consumer took `user_id` and `username`
 out of the client's JSON, so the sender was whoever the client claimed to be — anyone could post as
@@ -50,11 +55,17 @@ generic `1006` and tells the caller nothing.
 ```json
 {"type": "subscribed", "conversation": {"kind": "dm", "id": 2}}
 {"type": "message.created", "message": { … MessageSerializer … }}
+
+{"type": "subscribed", "notifications": true}
+{"type": "notification.created", "notification": { … NotificationSerializer … }}
 ```
 
-`message` is `MessageSerializer`'s output, identical to `GET /api/messages/`. A client reconciling
-two shapes for the same object ends up with two renderers, which is the mistake `F-00` spent three
-points undoing on the frontend.
+Each payload is the REST endpoint's own output — identical to `GET /api/messages/` and
+`GET /api/notifications/` respectively. A client reconciling two shapes for the same object ends up
+with two renderers, which is the mistake `F-00` spent three points undoing on the frontend.
+
+Both sockets are **delivery only**. Sending anything up either one answers with an error naming the
+REST endpoint that does the write.
 
 ## How a message gets here
 
@@ -65,6 +76,25 @@ points undoing on the frontend.
 
 That indirection is `architecture.tex` §5.1, and it is what made this card possible after the code
 freeze without touching `messaging` at all.
+
+## How a notification gets here
+
+`RT-03`, and the same seam with one difference worth knowing before you change it.
+
+`notifications.services` — the only place a `Notification` row is written — publishes
+`NOTIFICATION_CREATED` after every write, carrying `user_id` and an **already-serialized**
+`payload`. Every other event on the seam hands over the model and lets the subscriber render it;
+`on_message_created` imports `MessageSerializer` to do exactly that. This one cannot, because
+`realtime` importing `notifications` is the thing `tests/test_decoupling.py` forbids in both
+directions. So the owning module serializes and the gateway forwards bytes whose shape it never has
+to know.
+
+The fan-out is addressed to `user_group(user_id)` — every socket that one person has open, and
+nobody else's. "A recipient receives only their own" is therefore a property of *where the message
+was sent*, not a check on arrival: there is no filter in `NotificationConsumer` to get wrong.
+
+A recipient with no socket open loses nothing. The row is committed before anyone is told, and
+`GET /api/notifications/` is still the product; the push is a convenience over it.
 
 A handler that raises is logged and skipped by `events.publish`, so a Redis outage degrades to *no
 live delivery* rather than *messages cannot be sent*. The socket is a convenience over a REST write
@@ -87,6 +117,9 @@ importable module and not a formatted string in each.
 
 A DM is the case that needs care: the participants connect from opposite ends, so the pair is sorted
 (`dm.<low>.<high>`) to make the name symmetric.
+
+`user_group(user_id)` is `user.<id>` — per person rather than per socket, so every tab someone has
+open updates from one `group_send`.
 
 ## The channel layer
 
