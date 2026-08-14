@@ -49,6 +49,10 @@ export default function GroupSettings() {
 
   const [term, setTerm] = useState('');
   const [candidates, setCandidates] = useState([]);
+  // U-13 — the existing branch below covers "found some, all already members".
+  // A search that matched nobody at all rendered nothing, which is the same
+  // class of bug and the more common one.
+  const [searched, setSearched] = useState(false);
   const [searching, setSearching] = useState(false);
   const [busyUserId, setBusyUserId] = useState(null);
 
@@ -80,8 +84,10 @@ export default function GroupSettings() {
     setSearching(true);
     try {
       setCandidates(await searchUsers(term));
+      setSearched(true);
     } catch {
       setCandidates([]);
+      setSearched(false);
       setError('The user search could not be completed.');
     } finally {
       setSearching(false);
@@ -234,11 +240,11 @@ export default function GroupSettings() {
               <div className="space-y-3">
                 <div>
                   <div className="text-xs text-slate-500">Name</div>
-                  <div className="text-sm text-slate-200">{group.name}</div>
+                  <div className="text-sm text-slate-200 break-words">{group.name}</div>
                 </div>
                 <div>
                   <div className="text-xs text-slate-500">Description</div>
-                  <div className="text-sm text-slate-200">
+                  <div className="text-sm text-slate-200 break-words">
                     {group.description || 'No description.'}
                   </div>
                 </div>
@@ -352,6 +358,12 @@ export default function GroupSettings() {
                 {candidates.length > 0 && addable.length === 0 && (
                   <div className="text-xs text-slate-600">
                     Everyone matching that is already a member.
+                  </div>
+                )}
+                {searched && candidates.length === 0 && (
+                  <div className="text-xs text-slate-600">
+                    Nobody matched that name. The directory matches whole and partial usernames,
+                    and never lists your own account.
                   </div>
                 )}
               </div>

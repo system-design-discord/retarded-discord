@@ -77,18 +77,18 @@ const ViewProfile = () => {
               {profileUser.username ? profileUser.username[0].toUpperCase() : 'U'}
             </div>
             <div>
-              <h2 className="text-2xl font-extrabold text-white">{profileUser.username}</h2>
+              <h2 className="text-2xl font-extrabold text-white break-words">{profileUser.username}</h2>
               <p className="text-xs text-indigo-400 font-semibold">{profileUser.role || 'Member'}</p>
               {/* Only show email if it's your own profile or if the API explicitly returns it based on privacy settings */}
               {profileUser.email && (
-                <p className="text-xs text-slate-500 mt-0.5">{profileUser.email}</p>
+                <p className="text-xs text-slate-500 mt-0.5 break-words">{profileUser.email}</p>
               )}
             </div>
           </div>
 
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500">About Me</label>
-            <p className="text-sm text-slate-300">{profileUser.bio || 'This user has not set a bio yet.'}</p>
+            <p className="text-sm text-slate-300 break-words">{profileUser.bio || 'This user has not set a bio yet.'}</p>
           </div>
 
           {/* Acceptance Criteria: your own profile shows the edit affordance and theirs does not */}

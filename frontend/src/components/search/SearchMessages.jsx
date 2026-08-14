@@ -100,13 +100,20 @@ const SearchMessages = () => {
                     {new Date(result.created_at).toLocaleString()}
                   </span>
                 </div>
-                <div className="text-sm text-slate-200">
+                <div className="text-sm text-slate-200 break-words">
                   <strong>{result.sender.username}:</strong> {result.text}
                   {result.is_edited && <span className="text-[11px] text-slate-500 ml-2">(edited)</span>}
                 </div>
               </button>
             ))}
           </div>
+
+          {!hasSearched && !isSearching && (
+            <div className="text-center text-slate-500 text-sm py-12 border border-slate-800/50 rounded-2xl bg-slate-900/20">
+              Search your messages. Direct messages, groups and channel topics you are part of are
+              all searched; nothing else is.
+            </div>
+          )}
 
           {hasSearched && !isSearching && !error && results.length === 0 && (
             <div className="text-center text-slate-500 text-sm py-12 border border-slate-800/50 rounded-2xl bg-slate-900/20">

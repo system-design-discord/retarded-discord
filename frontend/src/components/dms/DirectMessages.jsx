@@ -36,6 +36,10 @@ export default function DirectMessages() {
   const [lookup, setLookup] = useState('');
   const [candidates, setCandidates] = useState([]);
   const [searching, setSearching] = useState(false);
+  // U-13 — "no hits" and "not searched yet" render the same empty list, so the
+  // block below needs to know which of the two it is looking at. Without this
+  // a search that found nobody drew nothing at all and read as a broken search.
+  const [searched, setSearched] = useState(false);
 
   // `?user=<id>` is what SearchMessages links a direct-message hit to, so the
   // deep link and the sidebar selection are the same piece of state.
@@ -80,8 +84,10 @@ export default function DirectMessages() {
     setSearching(true);
     try {
       setCandidates(await searchUsers(term));
+      setSearched(true);
     } catch {
       setCandidates([]);
+      setSearched(false);
       setError('The user search could not be completed.');
     } finally {
       setSearching(false);
@@ -91,11 +97,12 @@ export default function DirectMessages() {
   const open = (id) => {
     setSearchParams({ user: String(id) });
     setCandidates([]);
+    setSearched(false);
     setLookup('');
   };
 
   return (
-    <div className="min-h-screen h-screen bg-slate-950 text-slate-100 flex">
+    <div className="min-h-dvh h-dvh bg-slate-950 text-slate-100 flex">
       <NavSidebar active="/dms" />
 
       {/* Below md the list and the conversation take turns: three panes in
@@ -127,6 +134,14 @@ export default function DirectMessages() {
             </button>
           </form>
         </div>
+
+        {searched && candidates.length === 0 && (
+          <EmptyState
+            icon="🔍"
+            title="Nobody matched that name"
+            hint="The directory matches whole and partial usernames. Check the spelling, or ask them for their exact username."
+          />
+        )}
 
         {candidates.length > 0 && (
           <div className="space-y-1">

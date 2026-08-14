@@ -111,7 +111,7 @@ function RoleCard({ role, heldByActor, busy, onToggle, onRename, onDelete }) {
           </form>
         ) : (
           <div className="min-w-0">
-            <h3 className="font-semibold truncate">{role.name}</h3>
+            <h3 className="font-semibold break-words min-w-0">{role.name}</h3>
             <p className="text-xs text-slate-500">
               {granted} of {PERMISSION_KEYS.length} permissions granted
             </p>

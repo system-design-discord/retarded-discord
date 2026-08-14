@@ -143,8 +143,8 @@ export default function NotificationsCenter() {
                       }`}
                     />
                     <div className="flex-1 min-w-0">
-                      <strong className="text-sm text-white">{notification.title}</strong>
-                      <p className="text-xs text-slate-400 mt-1">{notification.body}</p>
+                      <strong className="text-sm text-white break-words">{notification.title}</strong>
+                      <p className="text-xs text-slate-400 mt-1 break-words">{notification.body}</p>
                       <Timestamp
                         value={notification.created_at}
                         className="text-[11px] text-slate-600 mt-2 block"
