@@ -35,6 +35,7 @@ which is what stops the three of them from disagreeing (`A-10`).
 from rest_framework.exceptions import PermissionDenied
 
 from channels_app.models import ChannelMember
+from common import messages
 from groups_app.models import GroupMember
 from roles.models import PERMISSION_FIELDS
 
@@ -90,7 +91,7 @@ def has_permission(user, channel, permission):
 def require_permission(user, channel, permission):
     """`has_permission`, but raises so a view can simply call and continue."""
     if not has_permission(user, channel, permission):
-        raise PermissionDenied("شما دسترسی لازم برای این عملیات را ندارید.")
+        raise PermissionDenied(messages.NO_PERMISSION)
 
 
 def permissions_for(user, channel):
@@ -131,7 +132,7 @@ def is_channel_member(user, channel):
 def require_channel_membership(user, channel):
     """`is_channel_member`, but raises. Posting into a topic needs this."""
     if not is_channel_member(user, channel):
-        raise PermissionDenied("شما عضو این کانال نیستید.")
+        raise PermissionDenied(messages.NOT_CHANNEL_MEMBER)
 
 
 def is_group_member(user, group):
@@ -148,7 +149,7 @@ def is_group_member(user, group):
 
 def require_group_membership(user, group):
     if not is_group_member(user, group):
-        raise PermissionDenied("شما عضو این گروه نیستید.")
+        raise PermissionDenied(messages.NOT_GROUP_MEMBER)
 
 
 def has_group_permission(user, group, permission):
@@ -169,7 +170,7 @@ def has_group_permission(user, group, permission):
 
 def require_group_permission(user, group, permission):
     if not has_group_permission(user, group, permission):
-        raise PermissionDenied("شما دسترسی لازم برای این عملیات را ندارید.")
+        raise PermissionDenied(messages.NO_PERMISSION)
 
 
 def may_edit_message(user, message):
@@ -196,7 +197,7 @@ def may_edit_message(user, message):
 def require_edit_message(user, message):
     """`may_edit_message`, but raises so a view can simply call and continue."""
     if not may_edit_message(user, message):
-        raise PermissionDenied("تنها نویسندهٔ پیام می‌تواند آن را ویرایش کند.")
+        raise PermissionDenied(messages.NOT_MESSAGE_AUTHOR)
 
 
 def may_delete_message(user, message):
@@ -240,7 +241,7 @@ def may_delete_message(user, message):
 def require_delete_message(user, message):
     """`may_delete_message`, but raises so a view can simply call and continue."""
     if not may_delete_message(user, message):
-        raise PermissionDenied("شما دسترسی لازم برای حذف این پیام را ندارید.")
+        raise PermissionDenied(messages.NO_PERMISSION_TO_DELETE_MESSAGE)
 
 
 def may_send_media(user, channel):
@@ -275,4 +276,4 @@ def may_send_media(user, channel):
 def require_send_media(user, channel):
     """`may_send_media`, but raises so a view can simply call and continue."""
     if not may_send_media(user, channel):
-        raise PermissionDenied("ارسال رسانه در این کانال محدود شده است.")
+        raise PermissionDenied(messages.MEDIA_RESTRICTED_IN_CHANNEL)
