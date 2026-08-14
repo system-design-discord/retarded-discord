@@ -13,6 +13,11 @@ import { fetchAllPages } from '../lib/pagination';
 // A message carries exactly one target. That is enforced twice on the server
 // (MessageSerializer.validate and a database check constraint), so sending two
 // is a 400, not a silent preference.
+//
+// `targetFor` and `targetOf` are exported for `services/scheduling.js`, which
+// addresses the same three targets on a different endpoint. It imports them
+// rather than restating the mapping, because "never `*_id`" is only true while
+// there is one place that could get it wrong.
 
 /** The query parameter that narrows `messages/` to one conversation. */
 function selectorFor({ kind, id }) {
@@ -23,11 +28,30 @@ function selectorFor({ kind, id }) {
 }
 
 /** The write field that addresses one conversation. */
-function targetFor({ kind, id }) {
+export function targetFor({ kind, id }) {
   if (kind === 'dm') return { recipient: id };
   if (kind === 'group') return { group: id };
   if (kind === 'topic') return { topic: id };
   throw new Error(`unknown conversation kind: ${kind}`);
+}
+
+/**
+ * The conversation a message belongs to — `targetFor` read backwards.
+ *
+ * `messages/` and `messages/scheduled/` both return `recipient`, `group` and
+ * `topic` as **bare ids** with the other two null, so anything holding a
+ * message and wanting to know where it goes has to invert the mapping. Doing
+ * that here keeps the three field names in one file.
+ *
+ * Note the asymmetry a caller has to live with: a DM's target is its
+ * `recipient`, which is the *other* person only when you are the sender. The
+ * scheduled list is the caller's own, so there it always is.
+ */
+export function targetOf(message) {
+  if (message?.recipient != null) return { kind: 'dm', id: message.recipient };
+  if (message?.group != null) return { kind: 'group', id: message.group };
+  if (message?.topic != null) return { kind: 'topic', id: message.topic };
+  return null;
 }
 
 /** Every message in one conversation, oldest first, across all pages. */
