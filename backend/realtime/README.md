@@ -103,9 +103,35 @@ Two traps, both hit while building this:
   `docker compose up -d --force-recreate nginx`. Nothing to do with this module, everything to do
   with believing a walk failed when the product was fine.
 
-## Not done
+## The client
 
-**There is no client.** `F-07` — the SPA's WebSocket client — was cut at the Aug 11 bonus gate and
-has not been revived, so the app still receives new messages by the five-second poll in
-`hooks/useConversation.js`. The gateway is real, authenticated and tested; nothing in the browser
-calls it yet. `D-01` must say exactly that rather than claiming live delivery.
+`F-07` was cut at the Aug 11 bonus gate and revived; the SPA now calls this gateway.
+`frontend/src/lib/socket.js` is the whole of it, and it is the only file in the SPA that knows a
+WebSocket exists — `hooks/useConversation.js` calls `openConversationSocket({kind, id, onMessage,
+onStatus})` and stays a hook about messages.
+
+What it does with what this module documents above:
+
+- **The URL** comes from `window.location` — `wss:` under https, because a `ws://` socket opened
+  from an https page is blocked as mixed content and presents as a connection that fails instantly
+  and forever. `VITE_WS_BASE_URL` overrides it for a split-origin dev setup; the container stack and
+  `npm run dev` both proxy `/ws/` on the one origin, so it is normally blank.
+- **The token** goes in the query string, because a browser's `WebSocket` constructor cannot set a
+  header — the trade this module's `middleware.py` explains.
+- **`subscribed` is the signal**, not `onopen`. The handshake completing only means the consumer
+  called `accept()`, which it also does before closing with a refusal code; the frame means the
+  group join is real.
+- **The close codes are acted on, separately.** `4403` and `4404` are final answers — the client
+  stops and reports rather than reconnecting into a refusal forever. `4401` earns exactly one
+  refresh through `auth/refresh/` and one reconnect, since an expired access token is what a tab
+  left open always produces; a second `4401` stops, because looping would be a refresh storm. A
+  clean `1000` never reconnects. Everything else — `1006` from a dropped connection, `1012` from a
+  restart — retries with exponential backoff and jitter capped at thirty seconds. The jitter matters
+  here: every open conversation in every tab loses its socket at the same instant when this backend
+  restarts, and without it they all return at the same instant too.
+
+The five-second poll in `useConversation.js` is **kept** as a fallback and backed off to thirty
+seconds while a socket is connected. A handler that raises is logged and skipped by
+`events.publish`, so a Redis outage degrades to "no live delivery"; the poll is what makes that
+"messages arrive late" instead of "messages do not arrive". The chat header shows which of the two
+is in effect, so `D-01` can demonstrate the difference rather than assert it.

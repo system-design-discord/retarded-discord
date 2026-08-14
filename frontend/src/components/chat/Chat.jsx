@@ -25,7 +25,7 @@ export default function Chat({
   canDelete,
 }) {
   const { user } = useContext(AuthContext);
-  const { messages, loading, error, send, edit, remove } = useConversation(kind, id);
+  const { messages, loading, error, live, send, edit, remove } = useConversation(kind, id);
 
   // US-3.2 — "only and exclusively myself". The server grants nobody else, and
   // hiding the control everywhere else keeps the UI honest about that.
@@ -39,7 +39,27 @@ export default function Chat({
             <h2 className="font-bold text-slate-100 truncate">{title}</h2>
             {subtitle && <p className="text-xs text-slate-500 truncate mt-0.5">{subtitle}</p>}
           </div>
-          {headerExtra}
+          <div className="flex items-center gap-3 shrink-0">
+            {/* F-07's only visible surface. The distinction is worth showing
+                because it changes what "the other person has not replied" means:
+                connected, a message appears the instant it is written; falling
+                back, it can be up to half a minute behind. Both work. */}
+            <span
+              className="flex items-center gap-1.5 text-[11px] text-slate-500"
+              title={
+                live
+                  ? 'Connected — new messages arrive as they are sent.'
+                  : 'Not connected — refreshing every few seconds instead.'
+              }
+            >
+              <span
+                aria-hidden="true"
+                className={`w-1.5 h-1.5 rounded-full ${live ? 'bg-emerald-500' : 'bg-slate-600'}`}
+              />
+              {live ? 'Live' : 'Polling'}
+            </span>
+            {headerExtra}
+          </div>
         </header>
 
         {error && (

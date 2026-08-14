@@ -1,4 +1,5 @@
 import api from './api';
+import { readApiError } from '../lib/apiError';
 import { fetchAllPages } from '../lib/pagination';
 
 // The one place in the SPA that knows the roles API's shape.
@@ -21,23 +22,10 @@ import { fetchAllPages } from '../lib/pagination';
 // Hiding a control is not a permission check. Everything here is refused by the
 // server as well, and INT-2's matrix exercises exactly these paths with the UI
 // bypassed.
-
-// `listChannels` and `getChannel` are `channels_app`'s endpoints rather than
-// this module's, and they are here because the role manager needs a channel to
-// manage and a name to put at the top of it. They are the minimum this surface
-// needs; when F-04 lands a channels service, it should take them over and this
-// file should import them.
-
-/** Channels the caller belongs to. */
-export function listChannels() {
-  return fetchAllPages(api, 'channels/');
-}
-
-/** One channel, with its topics nested. Needs membership, not a permission. */
-export async function getChannel(channelId) {
-  const response = await api.get(`channels/${channelId}/`);
-  return response.data;
-}
+//
+// The channel and topic endpoints are **not** here — `services/channels.js`
+// owns those. This file borrowed `listChannels` and `getChannel` while F-06 was
+// the only screen with a channel to name; F-04 took them back.
 
 /**
  * US-8.3 — what the caller may do in this channel, and under what role name.
@@ -123,20 +111,7 @@ export function withRoleIds(members, roles) {
 /**
  * The server's complaint, in the shape DRF actually sends it.
  *
- * A permission overreach comes back as `{can_delete_channel: ["..."]}` — keyed
- * by field, Persian, one entry per permission the caller tried to grant beyond
- * their own. A name clash is `{name: ["..."]}`. Flattening loses which field
- * failed, so callers get the field names too.
+ * Kept as a name because `RoleManager.jsx` and `useChannelRoles.js` call it;
+ * the reader itself is `lib/apiError.js`, shared with the channels service.
  */
-export function readRoleError(error, fallback) {
-  const data = error?.response?.data;
-  if (!data) return fallback;
-  if (typeof data === 'string') return data;
-
-  const messages = Object.entries(data).flatMap(([field, value]) => {
-    const texts = Array.isArray(value) ? value : [String(value)];
-    return texts.map((text) => (field === 'detail' || field === 'non_field_errors' ? text : `${field}: ${text}`));
-  });
-
-  return messages.length > 0 ? messages.join('\n') : fallback;
-}
+export const readRoleError = readApiError;

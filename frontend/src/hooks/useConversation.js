@@ -5,6 +5,7 @@ import {
   listMessages,
   sendMessage,
 } from '../services/messages';
+import { openConversationSocket } from '../lib/socket';
 
 // One conversation, whichever of the three kinds it is. The DM view, the group
 // view and the channel topic view differ in exactly one value — the target —
@@ -19,10 +20,18 @@ import {
 //   * it never decides who may edit or delete. It reports the server's refusal;
 //     roles.services is the authority (architecture.tex §5.1).
 
-// Live delivery is F-07, and F-07 was cut at the Aug 11 bonus gate. This is a
-// poll, it is honest about being one, and it is what makes two browsers see
-// each other's messages without a manual refresh.
+// F-07 opened the socket, so live delivery is the socket's job now and the poll
+// is the fallback rather than the mechanism. It is kept, not deleted: a Redis
+// outage makes `realtime/publisher.py` log and skip, a proxy that does not
+// forward `Upgrade` never completes the handshake, and in both cases messages
+// still arrive — just slowly. Deleting the poll would trade "five seconds late"
+// for "silently broken".
+//
+// So the interval tracks the socket. Five seconds while nothing is connected,
+// thirty once the gateway has confirmed the subscription — still a safety net
+// against a frame the socket dropped, at a sixth of the requests.
 const REFRESH_MS = 5000;
+const LIVE_REFRESH_MS = 30000;
 
 function readError(error, fallback) {
   const body = error?.response?.data;
@@ -40,6 +49,7 @@ export default function useConversation(kind, id) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [live, setLive] = useState(false);
 
   const target = useMemo(() => (id ? { kind, id } : null), [kind, id]);
 
@@ -75,9 +85,49 @@ export default function useConversation(kind, id) {
 
   useEffect(() => {
     if (!target) return undefined;
-    const timer = setInterval(() => refresh({ quiet: true }), REFRESH_MS);
+    const period = live ? LIVE_REFRESH_MS : REFRESH_MS;
+    const timer = setInterval(() => refresh({ quiet: true }), period);
     return () => clearInterval(timer);
-  }, [target, refresh]);
+  }, [target, refresh, live]);
+
+  // One message off the wire. Two rules, both load-bearing:
+  //
+  //   * **Dedupe by id.** `realtime/publisher.py` fans a message out to the
+  //     conversation's group, and for a direct message that group is
+  //     `dm_group(sender, recipient)` — symmetric, so the sender's own socket
+  //     is in it. `send` below has already appended what the server returned,
+  //     and the poll may deliver the same row again. Without this the author
+  //     sees every message they write twice.
+  //   * **Keep `created_at` order.** `MessageList` renders the array as given
+  //     and `listMessages` hands it over oldest-first; appending blindly is
+  //     right almost always and wrong exactly when a frame arrives late, which
+  //     is the case the ordering exists for. Ties break on id, because two
+  //     messages in the same conversation can share a timestamp to the second.
+  const receive = useCallback((incoming) => {
+    setMessages((current) => {
+      if (current.some((message) => message.id === incoming.id)) return current;
+      return [...current, incoming].sort(
+        (a, b) =>
+          new Date(a.created_at) - new Date(b.created_at) || a.id - b.id,
+      );
+    });
+  }, []);
+
+  // The socket. It carries no error into `error`: a refused *write* is
+  // something the user did and must see, while a gateway that will not connect
+  // is something the poll already covers, and turning it into a red banner
+  // would make a working conversation look broken.
+  useEffect(() => {
+    if (!target) return undefined;
+    setLive(false);
+    const socket = openConversationSocket({
+      kind: target.kind,
+      id: target.id,
+      onMessage: receive,
+      onStatus: (status) => setLive(status === 'live'),
+    });
+    return () => socket.close();
+  }, [target, receive]);
 
   const send = useCallback(
     async (text) => {
@@ -115,5 +165,5 @@ export default function useConversation(kind, id) {
     }
   }, []);
 
-  return { messages, loading, error, send, edit, remove, refresh };
+  return { messages, loading, error, live, send, edit, remove, refresh };
 }

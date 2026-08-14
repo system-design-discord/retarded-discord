@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import useChannelPermissions from '../../hooks/useChannelPermissions';
 import useChannelRoles from '../../hooks/useChannelRoles';
 import { PERMISSIONS, PERMISSION_KEYS } from '../../lib/permissions';
-import { getChannel } from '../../services/roles';
+import { getChannel } from '../../services/channels';
 import NavSidebar from '../layout/NavSidebar';
 import { EmptyState } from '../chat/primitives';
 
@@ -194,8 +194,11 @@ export default function RoleManager() {
 
       <main className="flex-1 min-w-0 p-4 md:p-8">
         <header className="mb-6">
-          <Link to="/channels/roles" className="text-xs text-slate-500 hover:text-slate-300">
-            ← All channels
+          <Link
+            to={`/channels/${channelId}`}
+            className="text-xs text-slate-500 hover:text-slate-300"
+          >
+            ← Back to # {channel?.name ?? channelId}
           </Link>
           <h1 className="text-xl font-bold mt-1">
             Roles in <span className="text-indigo-400"># {channel?.name ?? channelId}</span>
