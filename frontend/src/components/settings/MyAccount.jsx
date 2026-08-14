@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { AuthContext } from '../../context/AuthContext';
+import NavSidebar from '../layout/NavSidebar';
+import SettingsTabs from './SettingsTabs';
 
 const MyAccount = () => {
   const { logout } = useContext(AuthContext);
@@ -80,51 +82,13 @@ const MyAccount = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
-      {/* Primary Sidebar (Matching Dashboard & DMs) */}
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-2">
-        <div className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Navigation</div>
-        <Link to="/dashboard" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>🏠</span> Home
-        </Link>
-        <Link to="/dms" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>💬</span> Direct Messages
-        </Link>
-        <Link to="/groups" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>👥</span> Groups
-        </Link>
-        <Link to="/channels" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>📢</span> Channels
-        </Link>
-        <Link to="/search" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>🔍</span> Search
-        </Link>
-        <Link to="/notifications" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>🔔</span> Notifications
-        </Link>
-        <Link to="/settings/account" className="flex items-center gap-3 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium transition cursor-pointer">
-          <span>⚙️</span> Settings
-        </Link>
-      </aside>
+      <NavSidebar active="/settings/account" />
 
-      {/* Secondary Sidebar (Settings Menu) */}
-      <aside className="w-64 bg-slate-900/60 border-r border-slate-800/80 p-4 flex flex-col gap-2">
-        <div className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">User Settings</div>
-        <Link to="/settings/account" className="flex items-center px-4 py-2 bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 rounded-xl font-medium transition cursor-pointer">
-          My Account
-        </Link>
-        <Link to="/profile/edit" className="flex items-center px-4 py-2 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          Profile
-        </Link>
-        <Link to="/settings/privacy" className="flex items-center px-4 py-2 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          Privacy
-        </Link>
-        <Link to="/settings/invitations" className="flex items-center px-4 py-2 text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          Group Invitations
-        </Link>
-      </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-8 overflow-y-auto">
+      <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto">
+        <SettingsTabs />
+
         <div className="max-w-2xl mx-auto space-y-8">
           
           <div className="border-b border-slate-800 pb-6">
