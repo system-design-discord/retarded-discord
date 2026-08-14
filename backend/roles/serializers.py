@@ -3,6 +3,7 @@
 from rest_framework import serializers
 
 from channels_app.models import ChannelMember
+from common import messages
 from roles.models import PERMISSION_FIELDS, Role
 from roles.services import permissions_for
 
@@ -24,14 +25,14 @@ class RoleSerializer(serializers.ModelSerializer):
     def validate_name(self, value):
         name = value.strip()
         if not name:
-            raise serializers.ValidationError("نام نقش نمی‌تواند خالی باشد.")
+            raise serializers.ValidationError(messages.ROLE_NAME_REQUIRED)
 
         channel = self.context['channel']
         clashes = Role.objects.filter(channel=channel, name=name)
         if self.instance is not None:
             clashes = clashes.exclude(pk=self.instance.pk)
         if clashes.exists():
-            raise serializers.ValidationError("نقشی با این نام در این کانال وجود دارد.")
+            raise serializers.ValidationError(messages.ROLE_NAME_TAKEN)
 
         return name
 
@@ -47,7 +48,7 @@ class RoleSerializer(serializers.ModelSerializer):
         ]
         if overreach:
             raise serializers.ValidationError({
-                field: "شما این دسترسی را ندارید و نمی‌توانید آن را به نقشی بدهید."
+                field: messages.CANNOT_GRANT_UNHELD_PERMISSION
                 for field in overreach
             })
 
@@ -72,7 +73,7 @@ class MemberRoleSerializer(serializers.ModelSerializer):
 
         channel = self.context['channel']
         if value.channel_id != channel.pk:
-            raise serializers.ValidationError("این نقش متعلق به کانال دیگری است.")
+            raise serializers.ValidationError(messages.ROLE_BELONGS_TO_ANOTHER_CHANNEL)
 
         # US-8.2 again, from the other direction: assigning a role that grants
         # more than the actor holds is the same escalation as creating one.
@@ -80,7 +81,7 @@ class MemberRoleSerializer(serializers.ModelSerializer):
         overreach = [field for field in PERMISSION_FIELDS if getattr(value, field) and not held[field]]
         if overreach:
             raise serializers.ValidationError(
-                "این نقش دسترسی‌هایی دارد که خود شما ندارید: " + ", ".join(overreach)
+                messages.ROLE_GRANTS_UNHELD_PERMISSIONS + ", ".join(overreach)
             )
 
         return value
