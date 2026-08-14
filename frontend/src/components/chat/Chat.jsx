@@ -39,9 +39,11 @@ export default function Chat({
   const [draft, setDraft] = useState('');
 
   // The composer awaits `onSchedule` and clears its input only if the answer is
-  // truthy, which is the same rule it applies to a send. The modal, though,
-  // resolves whenever the user closes it — so the promise is parked here and
-  // settled from `onSettled` rather than returned immediately.
+  // truthy, which is the same rule it applies to a send. The modal outlives
+  // that answer, though — it stays open after a successful schedule so the row
+  // it just created appears in the pending list — so the promise is parked here
+  // and settled from whichever happens first: something was scheduled, or the
+  // modal was closed having scheduled nothing.
   const settle = useRef(null);
 
   const requestSchedule = (text) =>
@@ -51,8 +53,15 @@ export default function Chat({
       setScheduling(true);
     });
 
-  const finishSchedule = (created) => {
+  const scheduled = (created) => {
     settle.current?.(Boolean(created));
+    settle.current = null;
+  };
+
+  const closeSchedule = () => {
+    // Resolves `false` only if nothing was scheduled; once `scheduled` has run,
+    // `settle.current` is null and the composer has already cleared its draft.
+    settle.current?.(false);
     settle.current = null;
     setScheduling(false);
   };
@@ -135,7 +144,8 @@ export default function Chat({
           target={{ kind, id }}
           title={title}
           draft={draft}
-          onSettled={finishSchedule}
+          onScheduled={scheduled}
+          onClose={closeSchedule}
         />
       )}
     </div>

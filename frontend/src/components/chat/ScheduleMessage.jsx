@@ -41,7 +41,7 @@ function defaultWhen() {
  *  the "elsewhere" rows say the kind rather than inventing a title. */
 const KINDS = { dm: 'a direct message', group: 'a group', topic: 'a channel topic' };
 
-export default function ScheduleMessage({ target, title, draft = '', onSettled }) {
+export default function ScheduleMessage({ target, title, draft = '', onScheduled, onClose }) {
   const { scheduled, loading, error, setError, schedule, cancel } = useScheduledMessages();
 
   const [text, setText] = useState(draft);
@@ -62,9 +62,12 @@ export default function ScheduleMessage({ target, title, draft = '', onSettled }
 
     if (created) {
       setText('');
-      // Told to the composer so it can clear its own draft — the same "clear
-      // only once the server accepted it" rule the send path follows.
-      onSettled?.(created);
+      // Tell the composer, so it clears its own draft — the same "clear only
+      // once the server accepted it" rule the send path follows. **This does
+      // not close the modal.** Listing what is pending is half of what this
+      // card is for, and a modal that vanishes the moment you schedule
+      // something never shows you the row you just made.
+      onScheduled?.(created);
     }
   };
 
@@ -117,7 +120,7 @@ export default function ScheduleMessage({ target, title, draft = '', onSettled }
           </div>
           <button
             type="button"
-            onClick={() => onSettled?.(null)}
+            onClick={onClose}
             className="text-slate-500 hover:text-slate-300 transition cursor-pointer shrink-0"
             aria-label="Close"
           >
@@ -177,7 +180,7 @@ export default function ScheduleMessage({ target, title, draft = '', onSettled }
           <div className="flex justify-end gap-3">
             <button
               type="button"
-              onClick={() => onSettled?.(null)}
+              onClick={onClose}
               className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-sm font-medium transition cursor-pointer"
             >
               Close
