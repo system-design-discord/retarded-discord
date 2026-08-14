@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '../services/api';
 import { listVisibleMessages } from '../services/messages';
-import { unwrapList } from '../lib/pagination';
+import { listGroups } from '../services/groups';
 
 // The conversation-list derivation, in one place.
 //
@@ -107,14 +107,12 @@ export default function useRecentChats(meId, { limit = 6 } = {}) {
     if (!meId) return;
 
     try {
-      const [messages, groupsResponse] = await Promise.all([
-        listVisibleMessages(),
-        api.get('groups/'),
-      ]);
+      // `listGroups` follows `next`, so this is every group rather than the
+      // first fifty — the raw `groups/` read it replaced was page one only, and
+      // a name missing from this map renders as a blank conversation title.
+      const [messages, groups] = await Promise.all([listVisibleMessages(), listGroups()]);
 
-      const groupNames = new Map(
-        unwrapList(groupsResponse).map((group) => [group.id, group.name]),
-      );
+      const groupNames = new Map(groups.map((group) => [group.id, group.name]));
 
       const directs = await nameMissingPartners(
         conversationsFrom(messages.filter((message) => message.recipient !== null), meId),
