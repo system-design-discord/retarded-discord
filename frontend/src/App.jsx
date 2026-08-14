@@ -35,7 +35,7 @@ const PrivateRoute = ({ children }) => {
   const { user, loading } = useContext(AuthContext);
   const location = useLocation(); // Captures the current URL the user is trying to hit
 
-  if (loading) return <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">در حال بارگذاری...</div>;
+  if (loading) return <div className="min-h-screen bg-slate-900 text-white flex items-center justify-center">Loading…</div>;
   
   // If not logged in, redirect to login AND pass the target location in state
   return user ? children : <Navigate to="/login" state={{ from: location }} replace />;
@@ -48,7 +48,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        {/* آدرس اصلی خروجی مستقیم می‌ره به داشبورد اصلی */}
+        {/* The bare root goes straight to the dashboard */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         
         <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
@@ -78,7 +78,7 @@ function App() {
         <Route path="/settings/privacy" element={<PrivateRoute><PrivacySettings /></PrivateRoute>} />
         <Route path="/settings/invitations" element={<PrivateRoute><GroupInvitationPreferences /></PrivateRoute>} />
 
-        {/* روت‌های ناشناخته به صفحه 404 هدایت می‌شوند */}
+        {/* Anything unrecognised lands on the 404 page */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Router>
