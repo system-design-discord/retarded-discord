@@ -28,6 +28,14 @@ class ScheduledMessageCreateView(generics.CreateAPIView):
                 self.request.user,
                 topic.channel,
             )
+            # A-10 — the same gate as the immediate send. Without it,
+            # scheduling a message one second out is a way round the
+            # restriction, and the dispatcher would deliver it unchecked.
+            if serializer.validated_data.get('media_id'):
+                roles.require_send_media(
+                    self.request.user,
+                    topic.channel,
+                )
 
         media_id = serializer.validated_data.pop(
             'media_id',
