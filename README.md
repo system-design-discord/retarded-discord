@@ -190,6 +190,22 @@ row to lose. Every other action is gated by one of them, evaluated by `roles`.
 Adding a member also honours the **target's** `allow_invites` flag: with it off the
 add is a 403 and no row is written, whatever the actor holds (SH.2).
 
+**Media in a channel can be restricted** (US-2.4, `A-10`). `Channel.media_restricted`
+is a per-channel flag, default **off**, toggled through the same
+`PATCH /api/channels/<id>/` that renames a channel and gated on the same
+`can_edit_channel`:
+
+    PATCH /api/channels/<id>/   {"media_restricted": true}
+
+With it on, uploading or attaching a file in any of that channel's topics needs
+`can_send_media`; with it off every member may, the same as posting text. The
+channel owner is never refused. The decision is `roles.services.may_send_media`
+and it is asked in three places — `/api/media/upload/` (which takes an optional
+`topic` so it can be checked at upload time), `POST /api/messages/` and
+`POST /api/messages/schedule/` — because an upload names no conversation of its
+own, so a single gate would be a bypass. DMs and groups are unaffected: the rule
+is keyed on a channel and neither has one.
+
 Deleting a channel or a topic cascades, so both answer **200 with what went with
 it** rather than a silent 204 — `{"deleted_messages": 3}` for a topic,
 `{"deleted": {"topics": …, "members": …, "roles": …, "messages": …}}` for a channel.
@@ -264,11 +280,24 @@ conversation you could not write to now.
 time, lists what is pending and cancels one. It refuses a past time before the request as well as
 after it.
 
-**The dispatcher does not exist yet.** There is no `scheduling/tasks.py` and no beat schedule, so
-the worker starts with an empty task list and a scheduled message is stored and never sent. That is
-`SC-03`, whose issue was closed on Aug 14 **without the code being written**. The two Celery
-containers running is not evidence to the contrary, which is exactly why the composer carries a
-notice saying so and marks a row whose time has passed as *overdue*.
+**The dispatcher is `backend/scheduling/tasks.py`** (`SC-03`). `dispatch_due_messages` runs from
+`CELERY_BEAT_SCHEDULE` every 60 seconds, takes every row that is scheduled, due and undelivered, and
+releases it. Three things about how it does that are load-bearing:
+
+- **It claims before it publishes.** The flag is set by a conditional
+  `UPDATE … WHERE is_delivered = false` that must report one row, so two overlapping beat ticks or a
+  worker retrying after a lost acknowledgement cannot double-send.
+- **Release moves `created_at` to the delivery moment.** `Message.Meta.ordering` is `['created_at']`,
+  so a message left carrying its authoring time would sort *above* everything written while it
+  waited — the socket would render it last and a reload would show it in the middle.
+- **Delivery is one `events.publish(MESSAGE_CREATED)`**, after the claim commits. That single call is
+  the whole of "delivered even if the author is offline": `realtime.publisher` pushes it to the
+  conversation and `notifications.handlers` writes the recipient's notification, neither of which
+  touches the request cycle or the author's connection. `scheduling` imports neither module.
+
+Delivery is therefore accurate to the tick rather than to the second — a message can arrive up to a
+minute after its time, which is why the composer says *around*. The amber "nothing sends these yet"
+notice and the *overdue* marker `U-12` added while this was unbuilt are gone.
 
 ### The chat surface
 

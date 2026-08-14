@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import api from '../../services/api';
 import { AuthContext } from '../../context/AuthContext';
+import NavSidebar from '../layout/NavSidebar';
 
 const ViewProfile = () => {
   const navigate = useNavigate();
@@ -66,52 +67,28 @@ const ViewProfile = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
-      {/* Navigation Sidebar */}
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-2">
-        <div className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Navigation</div>
-        <Link to="/dashboard" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>🏠</span> Home
-        </Link>
-        <Link to="/dms" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>💬</span> Direct Messages
-        </Link>
-        <Link to="/groups" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>👥</span> Groups
-        </Link>
-        <Link to="/channels" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>📢</span> Channels
-        </Link>
-        <Link to="/search" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>🔍</span> Search
-        </Link>
-        <Link to="/notifications" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>🔔</span> Notifications
-        </Link>
-        <Link to="/profile" className="flex items-center gap-3 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium transition cursor-pointer">
-          <span>👤</span> Profile
-        </Link>
-      </aside>
+      <NavSidebar active="/profile" />
 
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-y-auto">
+      <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto">
         <div className="max-w-xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
           <div className="flex items-center gap-5">
             <div className="w-20 h-20 rounded-full bg-indigo-600/30 border-2 border-indigo-500 flex items-center justify-center font-extrabold text-2xl text-indigo-400">
               {profileUser.username ? profileUser.username[0].toUpperCase() : 'U'}
             </div>
             <div>
-              <h2 className="text-2xl font-extrabold text-white">{profileUser.username}</h2>
+              <h2 className="text-2xl font-extrabold text-white break-words">{profileUser.username}</h2>
               <p className="text-xs text-indigo-400 font-semibold">{profileUser.role || 'Member'}</p>
               {/* Only show email if it's your own profile or if the API explicitly returns it based on privacy settings */}
               {profileUser.email && (
-                <p className="text-xs text-slate-500 mt-0.5">{profileUser.email}</p>
+                <p className="text-xs text-slate-500 mt-0.5 break-words">{profileUser.email}</p>
               )}
             </div>
           </div>
 
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500">About Me</label>
-            <p className="text-sm text-slate-300">{profileUser.bio || 'This user has not set a bio yet.'}</p>
+            <p className="text-sm text-slate-300 break-words">{profileUser.bio || 'This user has not set a bio yet.'}</p>
           </div>
 
           {/* Acceptance Criteria: your own profile shows the edit affordance and theirs does not */}

@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import useChannelPermissions from '../../hooks/useChannelPermissions';
 import useChannelRoles from '../../hooks/useChannelRoles';
-import { PERMISSIONS, PERMISSION_KEYS } from '../../lib/permissions';
-import { getChannel } from '../../services/channels';
+import { CAN_EDIT_CHANNEL, PERMISSIONS, PERMISSION_KEYS } from '../../lib/permissions';
+import { getChannel, updateChannel } from '../../services/channels';
 import NavSidebar from '../layout/NavSidebar';
 import { EmptyState } from '../chat/primitives';
 
@@ -111,7 +111,7 @@ function RoleCard({ role, heldByActor, busy, onToggle, onRename, onDelete }) {
           </form>
         ) : (
           <div className="min-w-0">
-            <h3 className="font-semibold truncate">{role.name}</h3>
+            <h3 className="font-semibold break-words min-w-0">{role.name}</h3>
             <p className="text-xs text-slate-500">
               {granted} of {PERMISSION_KEYS.length} permissions granted
             </p>
@@ -171,6 +171,28 @@ export default function RoleManager() {
   const [newRoleName, setNewRoleName] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // A-10 — the media restriction is a plain field on the channel, so the
+  // existing `updateChannel` is the whole write. No new service function.
+  const mayEditChannel = can(CAN_EDIT_CHANNEL);
+
+  const toggleMediaRestriction = (next) =>
+    run(async () => {
+      try {
+        // Move state only to what the server returned, the same rule
+        // `useChannelRoles` follows: a refused PATCH must leave the switch
+        // showing what is actually stored, not what was clicked.
+        const updated = await updateChannel(channelId, { media_restricted: next });
+        setChannel(updated);
+        setError('');
+      } catch (caught) {
+        setError(
+          caught?.response?.status === 403
+            ? 'Changing the media restriction needs can_edit_channel, which you do not hold.'
+            : 'The media restriction could not be changed.',
+        );
+      }
+    });
+
   useEffect(() => {
     getChannel(channelId)
       .then(setChannel)
@@ -225,6 +247,34 @@ export default function RoleManager() {
               </button>
             )}
           </div>
+        )}
+
+        {/* A-10 / US-2.4 — the per-channel media restriction. Rendered only for
+            holders of can_edit_channel, which is a courtesy and not the check:
+            the server refuses the PATCH regardless of what this shows, and the
+            acceptance criterion is verified with this UI bypassed. */}
+        {mayEditChannel && channel && (
+          <section className="max-w-2xl mb-6 rounded-xl border border-slate-800 bg-slate-900 p-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1 accent-indigo-500"
+                checked={Boolean(channel.media_restricted)}
+                disabled={busy}
+                onChange={(event) => toggleMediaRestriction(event.target.checked)}
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-slate-200">
+                  Restrict media in this channel
+                </span>
+                <span className="block text-xs text-slate-500 mt-0.5 break-words">
+                  {channel.media_restricted
+                    ? 'On — only members whose role grants can_send_media may send files. You are the owner or hold it yourself, so you are unaffected.'
+                    : 'Off — every member of this channel may send files, the same as text.'}
+                </span>
+              </span>
+            </label>
+          </section>
         )}
 
         {loadingPermissions ? (

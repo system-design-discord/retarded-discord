@@ -48,6 +48,12 @@ class Channel(models.Model):
     The owner is the channel's super-admin. `roles.services` treats them as
     implicitly holding all eight permissions, so ownership is never a row that
     can be revoked by accident.
+
+    `media_restricted` is US-2.4's per-channel media gate (A-10) and defaults to
+    off, so an existing channel behaves exactly as it did before. It is a flag
+    and not a decision: whether a given member may actually upload is
+    `roles.services.may_send_media`'s to answer, because no module decides
+    permissions for itself (`architecture.tex` §5.1).
     """
 
     owner = models.ForeignKey(
@@ -56,6 +62,9 @@ class Channel(models.Model):
     name = models.CharField(max_length=100, verbose_name="نام کانال")
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات کانال")
     avatar = models.ImageField(upload_to='channel_avatars/', blank=True, null=True, verbose_name="تصویر کانال")
+    media_restricted = models.BooleanField(
+        default=False, verbose_name="محدودیت ارسال رسانه"
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
 
     objects = ChannelManager()

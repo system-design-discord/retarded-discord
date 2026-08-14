@@ -30,7 +30,7 @@ export default function GroupChat() {
   const canDelete = (message) => message.sender?.id === user?.id || isAdmin;
 
   return (
-    <div className="min-h-screen h-screen bg-slate-950 text-slate-100 flex">
+    <div className="min-h-dvh h-dvh bg-slate-950 text-slate-100 flex">
       <NavSidebar active="/groups" />
 
       {error && !loading ? (

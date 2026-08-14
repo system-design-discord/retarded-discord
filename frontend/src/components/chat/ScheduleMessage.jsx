@@ -13,21 +13,13 @@ import { Timestamp } from './primitives';
 // It owns `useScheduledMessages` itself rather than taking the list as a prop,
 // so nothing is fetched until somebody opens it. The list is global (the
 // endpoint is), and `pendingFor` narrows it to this conversation.
-
-/**
- * The notice, kept in one constant so `SC-03` is a single deletion.
- *
- * Everything on this screen works: the message is stored, listed and
- * cancellable, and the API refuses a past time. What does not exist is the
- * dispatcher — no `backend/scheduling/tasks.py`, no beat schedule — so nothing
- * ever flips `is_delivered` and the message is never sent. Two Celery
- * containers are running, which is exactly why this has to be said out loud:
- * they read as a working feature to anybody checking quickly.
- */
-const NOT_DELIVERED_YET =
-  'Nothing sends these yet. The message is stored and you can cancel it, but the dispatcher ' +
-  'that would deliver it (SC-03) is unwritten — so a scheduled message stays on this list until ' +
-  'you cancel it, and it is not visible in the conversation meanwhile.';
+//
+// `SC-03` landed the dispatcher, so a row leaves this list on its own when its
+// time comes. The beat tick is every 60 seconds, which is why a row can sit
+// here a moment past its time and why the field's hint says "around" — that is
+// the schedule working, not a failure. The amber notice and the *overdue*
+// marker this modal carried while the dispatcher was unwritten went with it;
+// a passed time is now at most a minute of waiting, not a permanent state.
 
 /** Fifteen minutes out. Far enough clear of the server's "strictly future"
  *  boundary that a browser clock a minute or two fast still produces a valid
@@ -77,8 +69,6 @@ export default function ScheduleMessage({ target, title, draft = '', onScheduled
   };
 
   const row = (message, label) => {
-    const overdue = new Date(message.scheduled_at) <= new Date();
-
     return (
       <li
         key={message.id}
@@ -89,14 +79,6 @@ export default function ScheduleMessage({ target, title, draft = '', onScheduled
           <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
             {label && <span>{label} ·</span>}
             <Timestamp value={message.scheduled_at} />
-            {overdue && (
-              <span
-                className="text-amber-400"
-                title="Its time has passed and it is still pending — see the notice above."
-              >
-                overdue
-              </span>
-            )}
           </div>
         </div>
         <button
@@ -128,10 +110,6 @@ export default function ScheduleMessage({ target, title, draft = '', onScheduled
           </button>
         </div>
 
-        <div className="rounded-xl border border-amber-900/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200 mb-4">
-          {NOT_DELIVERED_YET}
-        </div>
-
         <form onSubmit={submit} className="space-y-4">
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-slate-400" htmlFor="schedule-text">
@@ -160,7 +138,9 @@ export default function ScheduleMessage({ target, title, draft = '', onScheduled
               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition"
             />
             <p className="text-[11px] text-slate-600">
-              Your local time. The server refuses anything not strictly in the future.
+              Your local time. The server refuses anything not strictly in the future, and
+              delivery happens on the next dispatch tick — around your chosen time, within a
+              minute of it.
             </p>
           </div>
 

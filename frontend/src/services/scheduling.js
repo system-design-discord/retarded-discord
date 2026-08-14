@@ -27,13 +27,14 @@ import { fetchAllPages } from '../lib/pagination';
 //   * **There is no PATCH.** A scheduled message cannot be edited or moved;
 //     cancel and re-create is the only reschedule.
 //
-// **And the one that matters most: nothing delivers these yet.** `SC-02` landed
-// the API and `SC-01` the Celery containers, but `SC-03` — the beat task that
-// flips `is_delivered` when the time passes — is unwritten. There is no
-// `backend/scheduling/tasks.py` and no beat schedule, so a scheduled message is
-// stored and then sits there. Two running worker containers otherwise read as a
-// working feature. `ScheduleMessage.jsx` says so on the screen, and it should
-// keep saying so until that card lands.
+// **And the one worth knowing about timing:** `SC-03` landed the dispatcher, so
+// these are delivered. `backend/scheduling/tasks.py` runs from the beat schedule
+// every 60 seconds, flips `is_delivered` under a conditional claim and publishes
+// `MESSAGE_CREATED`, which is what puts the message on the socket and raises the
+// recipient's notification whether or not the author is still connected. The
+// consequence for a caller here is that delivery is accurate to the tick and not
+// to the second: a row can appear on `messages/scheduled/` for up to a minute
+// after its time, and that is the schedule rather than a failure.
 
 /**
  * US-B2.1 — write a message now and have it sent later.

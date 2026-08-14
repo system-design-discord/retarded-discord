@@ -65,11 +65,16 @@ modal resolves whenever it is closed rather than when it is opened, `Chat.jsx` p
 a ref and settles it from `onSettled`, with an unmount cleanup that resolves `false` so a closed tab
 cannot leave the button disabled forever.
 
-**Nothing delivers a scheduled message yet.** `SC-02` landed the API and `SC-01` the Celery
-containers, but `SC-03` — the beat task that flips `is_delivered` — is unwritten, so a scheduled
-message is stored and sits there. The modal says so in an amber notice held in one constant, and a
-row whose time has passed is marked *overdue*, because that is the visible symptom and an
-unlabelled one reads as a bug. Delete the constant when `SC-03` lands.
+**Scheduled messages are delivered by a beat task** (`SC-03`,
+`backend/scheduling/tasks.py`). It runs every 60 seconds, claims each due row conditionally so two
+ticks cannot double-send, and publishes `MESSAGE_CREATED` — so a released message arrives over the
+socket and raises a notification exactly like one sent by hand, with the author offline. A row
+leaves this modal's list on its own when its time comes.
+
+The amber notice and the *overdue* marker that stood in for the missing dispatcher are **gone**, as
+`U-12` said they would be. A row sitting a moment past its time now means the next tick has not
+fired yet — at most a minute — so the field's hint says delivery is *around* the chosen time and
+nothing is labelled as wrong.
 
 ## Known limitations
 

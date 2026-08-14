@@ -99,7 +99,7 @@ export default function ChannelView() {
   // would lose both the conversation and the message explaining the refusal.
   if (error && !channel) {
     return (
-      <div className="min-h-screen h-screen bg-slate-950 text-slate-100 flex">
+      <div className="min-h-dvh h-dvh bg-slate-950 text-slate-100 flex">
         <NavSidebar active="/channels" />
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-sm text-slate-400 px-6 text-center">
           {error}
@@ -112,7 +112,7 @@ export default function ChannelView() {
   }
 
   return (
-    <div className="min-h-screen h-screen bg-slate-950 text-slate-100 flex">
+    <div className="min-h-dvh h-dvh bg-slate-950 text-slate-100 flex">
       <NavSidebar active="/channels" />
 
       <div className="flex-1 min-w-0 flex flex-col">

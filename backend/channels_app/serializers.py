@@ -48,6 +48,10 @@ class ChannelSerializer(serializers.ModelSerializer):
     `topics` is nested read-only so `F-04` can list channels and their topics in
     one request; writing a topic goes through the topic endpoints, where the
     `can_create_topic` gate lives.
+
+    `media_restricted` is deliberately writable (A-10): `PATCH channels/<id>/`
+    is the admin's toggle, and it needs no view of its own because the update
+    view is already gated on `can_edit_channel`.
     """
 
     owner = UserSerializer(read_only=True)
@@ -58,7 +62,7 @@ class ChannelSerializer(serializers.ModelSerializer):
         model = Channel
         fields = [
             'id', 'owner', 'name', 'description', 'avatar',
-            'created_at', 'member_count', 'topics',
+            'media_restricted', 'created_at', 'member_count', 'topics',
         ]
         read_only_fields = ['id', 'owner', 'created_at', 'member_count', 'topics']
 

@@ -31,7 +31,7 @@ export default function CreateGroupModal({ onClose, onCreate }) {
 
   return (
     <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl w-full max-w-md shadow-2xl">
+      <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold text-white mb-5">Create New Group</h2>
 
         <form onSubmit={submit} className="space-y-5">

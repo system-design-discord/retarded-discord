@@ -31,6 +31,10 @@ four components assumed otherwise.
 | `POST` | `channels/<id>/members/` | `can_add_member` **and** the target's `allow_invites` |
 | `DELETE` | `channels/<id>/members/<user_id>/` | `can_remove_member` |
 
+`PATCH channels/<id>/ {"media_restricted": true}` is the media-restriction
+toggle (`A-10`) — it needs no endpoint of its own because it is a plain field on
+the channel and the update path is already gated on `can_edit_channel`.
+
 Four more paths under `channels/<id>/` belong to `roles`, not here:
 `channels/<id>/roles/`, `channels/<id>/roles/<role_id>/`,
 `channels/<id>/members/<user_id>/role/` and `channels/<id>/me/permissions/`.
@@ -79,6 +83,27 @@ channel membership and nothing more — `user_stories_en.tex` is explicit that a
 channel is a collection of topics and that **all** members may exchange messages
 in them. The restriction in US-2.4 is on **media** (`A-10`), not on posting.
 
+## The media restriction — `A-10`
+
+`Channel.media_restricted` is a per-channel flag, **default off**, so a channel
+that predates `A-10` behaves exactly as it did. When it is on, attaching or
+uploading a file into any of that channel's topics needs the `can_send_media`
+permission; when it is off, every member may.
+
+This module stores the flag and decides nothing. The rule —
+
+> refuse only when the channel is restricted **and** the user does not hold
+> `can_send_media`
+
+— is `roles.services.may_send_media` / `require_send_media`, and the channel
+owner is never refused because `roles.services.has_permission` short-circuits on
+ownership, not because anything here checks for it. `media_app`, `messaging` and
+`scheduling` all call the same pair, which is what stops the upload endpoint,
+the attach-on-send path and the scheduler from disagreeing.
+
+DMs and groups are unaffected in both states: the rule is keyed on a channel, and
+a message with a `recipient` or a `group` target never reaches it.
+
 ## The ERD sweep — `C-01`
 
 `tests/test_erd_alignment.py` pins this module against `ERD.tex`: the three
@@ -98,6 +123,11 @@ Two differences are recorded rather than fixed:
 - **Timestamps are additive.** `Channel.created_at`, `Topic.created_at` and
   `ChannelMember.joined_at` are not in the ERD. They carry no relationship and
   remove no column.
+- **Deviation 26 — `Channel.media_restricted`.** `A-10` needs a column to hold
+  US-2.4's per-channel media restriction and `ERD.tex` has none, so
+  `test_channel_matches_the_erd`'s expected field set was widened to match the
+  model. Additive in the same sense as the timestamps, and recorded in the
+  execution plan rather than left for `INT-3` (Brief Rule 12).
 
 ## Where the entities came from
 

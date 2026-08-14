@@ -226,3 +226,20 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TASK_IGNORE_RESULT = True
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+# SC-03 — the beat schedule that runs the dispatcher. Every 60 seconds, so a
+# scheduled message is delivered within a minute of its time rather than to the
+# second; the composer's copy says "around" for that reason. The task itself
+# claims each row conditionally, so a tick that overruns the next one cannot
+# double-send.
+#
+# The card's file list names only `scheduling/tasks.py`, but a beat entry has to
+# live in settings and `scheduling/tests/test_celery_config.py` already asserts
+# Celery configuration from here. Recorded as a file-list departure in the
+# execution plan (deviation 28), the same disclosure C-03 and C-04 made.
+CELERY_BEAT_SCHEDULE = {
+    'dispatch-due-scheduled-messages': {
+        'task': 'scheduling.tasks.dispatch_due_messages',
+        'schedule': 60.0,
+    },
+}

@@ -54,6 +54,8 @@ The channel owner implicitly holds all eight.
 | `require_delete_message(user, message)` | The same, but raises |
 | `may_edit_message(user, message)` | `M-06` — the author, and nobody else, in any context |
 | `require_edit_message(user, message)` | The same, but raises |
+| `may_send_media(user, channel)` | `A-10` — the channel's restriction flag composed with `can_send_media` |
+| `require_send_media(user, channel)` | The same, but raises |
 
 Every answer is read from database rows at call time. Nothing is cached, so an
 admin reassigning a role takes effect on the caller's **very next request** —
@@ -144,15 +146,44 @@ decision back into `messaging`.
 Assigning a role publishes `common.events.ROLE_CHANGED`. Notifications and the
 real-time gateway subscribe to it; this module does not import them.
 
+## Sending media in a channel
+
+`A-10`, US-2.4 and US-7.3. `may_send_media` is the first rule here that is a
+**composition** rather than a lookup, and that is exactly why it belongs in this
+module:
+
+| Channel state | Who may send a file |
+|---|---|
+| `media_restricted = False` (the default) | every member, no role needed |
+| `media_restricted = True` | the owner, and holders of `can_send_media` |
+
+A caller that read `channel.media_restricted` itself and then worked out what it
+implied would be deciding its own access, which is the thing §5.1 forbids —
+so `media_app`, `messaging` and `scheduling` all ask this pair instead, and they
+cannot disagree with each other about the answer. `media_app` was the last module
+in the codebase deciding for itself, and this is the card that closed it.
+
+Note that **there is no owner branch in `may_send_media`**. "The channel admin is
+never refused" is true because `has_permission` short-circuits on ownership, the
+same way it does for the other seven permissions; writing a second ownership test
+here would be a second definition of what an owner is.
+
+Note also that this takes a **channel**. Groups have no equivalent, and
+`GROUP_ADMIN_PERMISSIONS` deliberately excludes `can_send_media`, so routing a
+group upload through `has_group_permission` would refuse every member including
+the admin.
+
 ## Status
 
-`R-01`, `R-04`, `R-02`, `R-03`, `R-05` and `M-06`'s decision are done, and `channels_app` was
-built on top of them without adding a single inline owner check. **`messaging/`
-no longer decides anything for itself**, which was the last violation of
-architecture.tex §5.1 in the codebase. `F-06` — the role management UI — is the
-one card left in this chain; it reads `me/permissions/` to decide which controls
-to show, and `INT-2`'s matrix deliberately bypasses that UI to prove the server
-refuses regardless.
+`R-01`, `R-04`, `R-02`, `R-03`, `R-05`, `M-06`'s decision, `F-06` and `A-10` are all done, and
+`channels_app` was built on top of them without adding a single inline owner
+check. **The chain is complete and architecture.tex §5.1 now holds with no
+exceptions**: `messaging/` gave up its last inline decision first, and `A-10`
+took `media_app`'s, which was the last one in the codebase. `F-06` is the role
+management UI; it reads `me/permissions/` to decide which controls to show, and
+`INT-2`'s matrix deliberately bypasses that UI to prove the server refuses
+regardless — as does `A-10`'s media restriction, whose acceptance criterion is
+verified over `curl`.
 
 Tests live in `roles/tests/`. `test_permissions.py` carries the sixteen-check
 permission matrix that `INT-2` also runs by hand against the API;

@@ -5,6 +5,7 @@ import useGroups from '../../hooks/useGroups';
 import { isGroupAdmin } from '../../services/groups';
 import { AuthContext } from '../../context/AuthContext';
 import { EmptyState } from '../chat/primitives';
+import NavSidebar from '../layout/NavSidebar';
 
 // US-5.1 — the groups you belong to, and the way into each one.
 //
@@ -17,9 +18,9 @@ import { EmptyState } from '../chat/primitives';
 // `group.title`, `group.lastMessage` and `group.memberCount`. A group has
 // `name`, `description` and a nested `members`, so that is what is shown.
 //
-// The navigation rail is still this file's own copy rather than `NavSidebar`.
-// That is `U-13`'s card — six screens carry it — and swapping it here would be
-// a tempting forty-line deletion in a diff that is about the group API.
+// `U-13` removed this file's own copy of the navigation rail in favour of
+// `NavSidebar`, which is what fixed the screen below 390px: the inlined rail was
+// a fixed 256px and did not collapse.
 
 export default function GroupsDashboard() {
   const navigate = useNavigate();
@@ -29,33 +30,9 @@ export default function GroupsDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
-      {/* U-13 owns this: it is the seventh copy of NavSidebar's links. */}
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-2">
-        <div className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Navigation</div>
-        <Link to="/dashboard" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>🏠</span> Home
-        </Link>
-        <Link to="/dms" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>💬</span> Direct Messages
-        </Link>
-        <Link to="/groups" className="flex items-center gap-3 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium transition cursor-pointer">
-          <span>👥</span> Groups
-        </Link>
-        <Link to="/channels" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>📢</span> Channels
-        </Link>
-        <Link to="/search" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>🔍</span> Search
-        </Link>
-        <Link to="/notifications" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>🔔</span> Notifications
-        </Link>
-        <Link to="/profile" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer">
-          <span>👤</span> Profile
-        </Link>
-      </aside>
+      <NavSidebar active="/groups" />
 
-      <main className="flex-1 min-w-0 p-8 overflow-y-auto">
+      <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto">
         <div className="max-w-4xl mx-auto space-y-6">
           <div className="flex justify-between items-center gap-4">
             <div className="min-w-0">

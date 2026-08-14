@@ -66,6 +66,12 @@ class MessageListCreateView(generics.ListCreateAPIView):
             roles.require_group_membership(self.request.user, group)
         if topic is not None:
             roles.require_channel_membership(self.request.user, topic.channel)
+            # A-10 — attaching a file is the other half of the media
+            # restriction. The upload endpoint checks it too, but an upload
+            # need not name a topic, so without this line the attach is a
+            # bypass. DMs and groups have no channel and are not asked.
+            if serializer.validated_data.get('media_id'):
+                roles.require_send_media(self.request.user, topic.channel)
 
         media_id = serializer.validated_data.pop('media_id', None)
         media_obj = MediaFile.objects.filter(id=media_id, user=self.request.user).first() if media_id else None
