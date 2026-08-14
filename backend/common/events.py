@@ -23,18 +23,32 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
-# The three events US-11.1 names. Their payloads are part of the contract — a
-# subscriber written against them must keep working when a second publisher
-# appears, which is exactly what happened to MEMBER_ADDED.
+# The three events US-11.1 names, plus the one US-B1.2 added. Their payloads are
+# part of the contract — a subscriber written against them must keep working
+# when a second publisher appears, which is exactly what happened to
+# MEMBER_ADDED.
 #
-# | Event           | Payload                                        | Published by            |
-# |-----------------|------------------------------------------------|-------------------------|
-# | MESSAGE_CREATED | message                                        | messaging               |
-# | MEMBER_ADDED    | user, actor, and one of channel= or group=     | channels_app, groups_app|
-# | ROLE_CHANGED    | channel, user, role, actor                     | roles                   |
+# | Event                | Payload                                    | Published by             |
+# |----------------------|--------------------------------------------|--------------------------|
+# | MESSAGE_CREATED      | message                                    | messaging                |
+# | MEMBER_ADDED         | user, actor, and one of channel= or group= | channels_app, groups_app |
+# | ROLE_CHANGED         | channel, user, role, actor                 | roles                    |
+# | NOTIFICATION_CREATED | user_id, payload                           | notifications            |
+#
+# NOTIFICATION_CREATED is the odd one out and deliberately so: it carries an
+# `id` and an already-serialized `payload` rather than the `Notification` row.
+# Every other event hands over the model and lets the subscriber serialize it —
+# `realtime.publisher` imports `MessageSerializer` to do exactly that for
+# MESSAGE_CREATED. That cannot happen here. `notifications` and `realtime` are
+# peers on this seam and neither may import the other (RT-03's third criterion,
+# asserted by `realtime/tests/test_decoupling.py`), so a `Notification` row on
+# the wire would be a row the only interested subscriber is forbidden to render.
+# The owning module serializes instead, and the gateway forwards bytes it does
+# not have to understand.
 MESSAGE_CREATED = 'message.created'
 MEMBER_ADDED = 'member.added'
 ROLE_CHANGED = 'role.changed'
+NOTIFICATION_CREATED = 'notification.created'
 
 _subscribers = defaultdict(list)
 
