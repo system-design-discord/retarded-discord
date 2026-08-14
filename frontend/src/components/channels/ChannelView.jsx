@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import useChannel from '../../hooks/useChannel';
 import useChannelPermissions from '../../hooks/useChannelPermissions';
+import { CAN_CREATE_TOPIC } from '../../lib/permissions';
 import { listMembers } from '../../services/roles';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
@@ -25,13 +26,15 @@ import { Avatar, EmptyState } from '../chat/primitives';
 export default function ChannelView() {
   const { channelId } = useParams();
   const { user } = useContext(AuthContext);
-  const { channel, topics, loading, error } = useChannel(channelId);
+  const { channel, topics, loading, error, setError, addTopic } = useChannel(channelId);
   // US-8.3, and the only read of `me/permissions/` on this screen. The hook is
   // shared with F-06's role manager rather than this file asking a second time.
   const { isOwner, can } = useChannelPermissions(channelId);
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [members, setMembers] = useState([]);
+  const [newTopic, setNewTopic] = useState('');
+  const [adding, setAdding] = useState(false);
 
   // Membership is all this needs — `ChannelMemberListCreateView` gates the read
   // on `IsChannelMember`, unlike the roles list, which needs `can_change_role`.
@@ -68,7 +71,33 @@ export default function ChannelView() {
   const mayDeleteAny = isOwner || can('can_delete_message');
   const canDelete = (message) => message.sender?.id === user?.id || mayDeleteAny;
 
-  if (error) {
+  // US-4.5. **Hiding this control is not the permission check.**
+  // `TopicListCreateView` sets `required_permission = 'can_create_topic'` and
+  // `HasChannelPermission` asks `roles.services` on every POST, so the refusal
+  // stands with this UI bypassed entirely — which is what INT-2's matrix
+  // exercises and what the acceptance criterion actually says. Not rendering a
+  // button the server would refuse is a courtesy to the user, nothing more.
+  const mayCreateTopic = can(CAN_CREATE_TOPIC);
+
+  const submitTopic = async (event) => {
+    event.preventDefault();
+    const name = newTopic.trim();
+    if (!name) return;
+
+    setAdding(true);
+    const created = await addTopic(name);
+    setAdding(false);
+    if (created) {
+      setNewTopic('');
+      setSearchParams({ topic: String(created.id) });
+    }
+  };
+
+  // Only a channel that would not *load* replaces the screen. A refused write —
+  // a duplicate topic name, a `can_create_topic` the caller does not hold —
+  // reports inline below, because throwing the reader back to the channel list
+  // would lose both the conversation and the message explaining the refusal.
+  if (error && !channel) {
     return (
       <div className="min-h-screen h-screen bg-slate-950 text-slate-100 flex">
         <NavSidebar active="/channels" />
@@ -134,7 +163,38 @@ export default function ChannelView() {
           {!loading && topics.length === 0 && (
             <span className="text-xs text-slate-600">This channel has no topics yet.</span>
           )}
+
+          {mayCreateTopic && (
+            <form onSubmit={submitTopic} className="shrink-0 flex items-center gap-1.5 ml-auto">
+              <input
+                value={newTopic}
+                onChange={(event) => setNewTopic(event.target.value)}
+                placeholder="New topic…"
+                className="w-32 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+              />
+              <button
+                type="submit"
+                disabled={adding || !newTopic.trim()}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-indigo-600 disabled:opacity-40 disabled:hover:bg-slate-800 text-xs font-semibold cursor-pointer"
+              >
+                {adding ? '…' : '+ Add'}
+              </button>
+            </form>
+          )}
         </nav>
+
+        {error && (
+          <div className="mx-4 mt-3 rounded-xl bg-rose-950/40 border border-rose-900/60 px-3 py-2 text-xs text-rose-300 whitespace-pre-line">
+            {error}
+            <button
+              type="button"
+              onClick={() => setError('')}
+              className="ml-3 underline cursor-pointer"
+            >
+              dismiss
+            </button>
+          </div>
+        )}
 
         {active ? (
           <Chat

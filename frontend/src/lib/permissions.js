@@ -65,6 +65,11 @@ export const PERMISSIONS = [
   },
 ];
 
+// F-05's create-topic gate names one key rather than a string literal, which is
+// the whole reason this file said it would be needed. A typo in a literal is a
+// control that is silently never shown; a typo in an import does not build.
+export const CAN_CREATE_TOPIC = 'can_create_topic';
+
 /** Just the keys, in model order. */
 export const PERMISSION_KEYS = PERMISSIONS.map((permission) => permission.key);
 
