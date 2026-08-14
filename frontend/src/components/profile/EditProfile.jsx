@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import NavSidebar from '../layout/NavSidebar';
+
+// U-13 — this screen had no navigation at all: the only ways out were its own
+// Save and Cancel buttons, so a reload landed the user somewhere with no rail.
+// It renders the shared one now like every other screen.
 
 const EditProfile = () => {
   const navigate = useNavigate();
@@ -48,7 +53,9 @@ const EditProfile = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
-      <main className="flex-1 p-8 overflow-y-auto flex items-center justify-center">
+      <NavSidebar active="/profile" />
+
+      <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto flex items-center justify-center">
         <div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
           <h2 className="text-2xl font-extrabold text-white">Edit Profile</h2>
 

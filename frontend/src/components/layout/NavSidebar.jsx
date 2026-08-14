@@ -1,12 +1,18 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import useNotifications from '../../hooks/useNotifications';
 
-// The seven-link navigation, written once. It was copy-pasted verbatim into
-// eight components, which is why two of them highlight the wrong entry and two
-// use buttons and `navigate()` where the rest use links.
+// The navigation, written once. It was copy-pasted verbatim into eight
+// components, which is why two of them highlighted the wrong entry and two used
+// buttons and `navigate()` where the rest used links.
 //
-// Only the screens this card rewrote adopt it so far. The rest are in flight
-// under U-13 and are left alone on purpose — see the note in the execution plan.
+// **U-13 finished the adoption**: every screen in the SPA renders this rail now,
+// and there are no inlined copies left. Three of the settings screens carried
+// *two* fixed 256px rails, which is 512px of chrome inside a 390px viewport;
+// their second rail became a horizontal tab strip instead.
+//
+// The **Settings** entry is U-13's addition and not cosmetic. `/settings/*` was
+// reachable from nowhere in the SPA, and since `G-04` put the only logout button
+// on the account screen, neither was logging out.
 
 const LINKS = [
   { to: '/dashboard', icon: '🏠', label: 'Home' },
@@ -16,6 +22,7 @@ const LINKS = [
   { to: '/search', icon: '🔍', label: 'Search' },
   { to: '/notifications', icon: '🔔', label: 'Notifications', badge: 'unread' },
   { to: '/profile', icon: '👤', label: 'Profile' },
+  { to: '/settings/account', icon: '⚙️', label: 'Settings' },
 ];
 
 /** Two digits and then some. A rail 64px wide at 390px cannot show "127". */
@@ -32,6 +39,10 @@ export default function NavSidebar({ active }) {
   // count nobody can see on a phone is not a notification surface.
   const { unread } = useNotifications();
 
+  // One entry stands for three routes, so `NavLink`'s own exact match would
+  // leave Settings unhighlighted on two of the three screens it reaches.
+  const inSettings = useLocation().pathname.startsWith('/settings');
+
   return (
     <aside className="w-16 md:w-64 shrink-0 bg-slate-900 border-r border-slate-800 p-2 md:p-4 flex flex-col gap-2">
       <div className="hidden md:block px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">
@@ -46,7 +57,7 @@ export default function NavSidebar({ active }) {
             to={to}
             className={({ isActive }) =>
               `relative flex items-center justify-center md:justify-start gap-3 px-2 md:px-4 py-2.5 rounded-xl font-medium transition cursor-pointer ${
-                isActive || active === to
+                isActive || active === to || (to.startsWith('/settings') && inSettings)
                   ? 'bg-indigo-600 text-white'
                   : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
               }`

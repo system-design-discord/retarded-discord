@@ -1,8 +1,9 @@
 import React, { useContext } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext'; // Import the AuthContext
 import useRecentChats from '../../hooks/useRecentChats';
 import { EmptyState, Timestamp } from '../chat/primitives';
+import NavSidebar from '../layout/NavSidebar';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -17,34 +18,10 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
-      {/* Sidebar Navigation - Upgraded to React Router Links */}
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-2">
-        <div className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Navigation</div>
-        <Link to="/dashboard" className="flex items-center gap-3 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium transition">
-          <span>🏠</span> Home
-        </Link>
-        <Link to="/dms" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition">
-          <span>💬</span> Direct Messages
-        </Link>
-        <Link to="/groups" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition">
-          <span>👥</span> Groups
-        </Link>
-        <Link to="/channels" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition">
-          <span>📢</span> Channels
-        </Link>
-        <Link to="/search" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition">
-          <span>🔍</span> Search
-        </Link>
-        <Link to="/notifications" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition">
-          <span>🔔</span> Notifications
-        </Link>
-        <Link to="/profile" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition">
-          <span>👤</span> Profile
-        </Link>
-      </aside>
+      <NavSidebar active="/dashboard" />
 
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-y-auto">
+      <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto">
         <div className="max-w-4xl mx-auto space-y-8">
           {/* Banner - Dynamically pulling the user's name */}
           <div className="bg-gradient-to-r from-indigo-900/50 via-slate-900 to-slate-900 border border-indigo-500/30 rounded-2xl p-8 shadow-xl">

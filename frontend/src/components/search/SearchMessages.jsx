@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import NavSidebar from '../layout/NavSidebar';
 
 // A hit's `conversation.kind` is one of the three targets a message can have,
 // and each one now has a URL that opens the conversation itself. F-05 gave the
@@ -43,18 +44,9 @@ const SearchMessages = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
-      <aside className="w-64 bg-slate-900 border-r border-slate-800 p-4 flex flex-col gap-2">
-        <div className="px-3 py-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Navigation</div>
-        <Link to="/dashboard" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer"><span>🏠</span> Home</Link>
-        <Link to="/dms" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer"><span>💬</span> Direct Messages</Link>
-        <Link to="/groups" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer"><span>👥</span> Groups</Link>
-        <Link to="/channels" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer"><span>📢</span> Channels</Link>
-        <Link to="/search" className="flex items-center gap-3 px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-medium transition cursor-pointer"><span>🔍</span> Search</Link>
-        <Link to="/notifications" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer"><span>🔔</span> Notifications</Link>
-        <Link to="/profile" className="flex items-center gap-3 px-4 py-2.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 rounded-xl font-medium transition cursor-pointer"><span>👤</span> Profile</Link>
-      </aside>
+      <NavSidebar active="/search" />
 
-      <main className="flex-1 p-8 overflow-y-auto">
+      <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto">
         <div className="max-w-3xl mx-auto space-y-6">
           <div>
             <h1 className="text-2xl font-extrabold text-white">Message Search</h1>
