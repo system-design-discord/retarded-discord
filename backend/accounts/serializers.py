@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
+from common import messages
+
 from .models import Profile
 
 User = get_user_model()
@@ -92,7 +94,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
-            raise serializers.ValidationError({"password": "رمز عبور و تکرار آن با هم مطابقت ندارند."})
+            raise serializers.ValidationError({"password": messages.PASSWORDS_DO_NOT_MATCH})
         return attrs
 
     def create(self, validated_data):

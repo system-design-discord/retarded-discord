@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
+from common import messages
 from media_app.serializers import MediaFileSerializer
 
 from .models import Message
@@ -42,11 +43,11 @@ class MessageSerializer(serializers.ModelSerializer):
 
         if not targets:
             raise serializers.ValidationError(
-                "پیام باید دارای دریافت‌کننده (کاربر)، گروه یا تاپیک باشد."
+                messages.MESSAGE_NEEDS_A_TARGET
             )
         if len(targets) > 1:
             raise serializers.ValidationError(
-                "پیام باید تنها یک مقصد داشته باشد: کاربر، گروه یا تاپیک."
+                messages.MESSAGE_NEEDS_ONE_TARGET
             )
         return attrs
 
@@ -77,7 +78,7 @@ class MessageEditSerializer(serializers.ModelSerializer):
 
     def validate_text(self, value):
         if not value or not value.strip():
-            raise serializers.ValidationError("متن پیام نمی‌تواند خالی باشد.")
+            raise serializers.ValidationError(messages.MESSAGE_TEXT_REQUIRED)
         return value
 
 

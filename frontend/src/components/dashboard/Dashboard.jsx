@@ -31,22 +31,23 @@ const Dashboard = () => {
             <p className="text-slate-400 text-sm">Jump right back into your conversations or start a new group chat.</p>
           </div>
 
-          {/* Quick Actions - These are fine as buttons since they act like cards */}
+          {/* Quick Actions. Real buttons, like every clickable row in the SPA — the
+              recent-chat list below was the one that had drifted (#106). */}
           <div>
             <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-4">Quick Actions</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <button onClick={() => navigate('/dms')} className="p-4 bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl text-left transition duration-200 group cursor-pointer">
-                <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">💬</div>
+              <button type="button" onClick={() => navigate('/dms')} className="p-4 bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl text-left transition duration-200 group cursor-pointer">
+                <div aria-hidden="true" className="text-2xl mb-2 group-hover:scale-110 transition-transform">💬</div>
                 <div className="font-bold text-slate-200">New Direct Message</div>
                 <div className="text-xs text-slate-500">Chat 1-on-1 with teammates</div>
               </button>
-              <button onClick={() => navigate('/groups')} className="p-4 bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl text-left transition duration-200 group cursor-pointer">
-                <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">👥</div>
+              <button type="button" onClick={() => navigate('/groups')} className="p-4 bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl text-left transition duration-200 group cursor-pointer">
+                <div aria-hidden="true" className="text-2xl mb-2 group-hover:scale-110 transition-transform">👥</div>
                 <div className="font-bold text-slate-200">Create Group</div>
                 <div className="text-xs text-slate-500">Form a team chat room</div>
               </button>
-              <button onClick={() => navigate('/channels')} className="p-4 bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl text-left transition duration-200 group cursor-pointer">
-                <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">📢</div>
+              <button type="button" onClick={() => navigate('/channels')} className="p-4 bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl text-left transition duration-200 group cursor-pointer">
+                <div aria-hidden="true" className="text-2xl mb-2 group-hover:scale-110 transition-transform">📢</div>
                 <div className="font-bold text-slate-200">Explore Channels</div>
                 <div className="text-xs text-slate-500">Browse project channels</div>
               </button>
@@ -73,17 +74,18 @@ const Dashboard = () => {
               )}
 
               {chats.map(chat => (
-                <div
+                <button
                   key={chat.key}
+                  type="button"
                   onClick={() => navigate(chat.to)}
-                  className="p-4 bg-slate-900 border border-slate-800/80 hover:bg-slate-800/60 rounded-xl flex justify-between items-center gap-4 transition cursor-pointer"
+                  className="w-full text-left p-4 bg-slate-900 border border-slate-800/80 hover:bg-slate-800/60 rounded-xl flex justify-between items-center gap-4 transition cursor-pointer"
                 >
                   <div className="min-w-0">
                     <div className="font-bold text-slate-200 truncate">{chat.title}</div>
                     <div className="text-xs text-slate-400 mt-1 truncate">{chat.preview}</div>
                   </div>
                   <Timestamp value={chat.at} className="shrink-0" />
-                </div>
+                </button>
               ))}
             </div>
           </div>

@@ -4,11 +4,16 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from common import messages
+
+# The serializer caps the extension; this caps the bytes. Both are user-facing.
+MAX_UPLOAD_MB = 10
+
 
 def validate_file_size(value):
     filesize = value.size
-    if filesize > 10 * 1024 * 1024:
-        raise ValidationError("حجم فایل نمی‌تواند بیشتر از 10 مگابایت باشد.")
+    if filesize > MAX_UPLOAD_MB * 1024 * 1024:
+        raise ValidationError(messages.FILE_TOO_LARGE.format(limit_mb=MAX_UPLOAD_MB))
 
 
 class MediaFile(models.Model):

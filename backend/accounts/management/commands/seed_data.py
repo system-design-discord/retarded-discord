@@ -25,24 +25,38 @@ User = get_user_model()
 DEMO_PASSWORD = 'testpass123'
 
 USERS = [
-    {'username': 'majid', 'email': 'majid@example.com', 'bio': 'توسعه‌دهنده بک‌اند و رسانه'},
-    {'username': 'amirm', 'email': 'amir@example.com', 'bio': 'توسعه‌دهنده فرانت‌اند'},
-    {'username': 'arvin', 'email': 'arvin@example.com', 'bio': 'مالک محصول'},
+    {'username': 'majid', 'email': 'majid@example.com', 'bio': 'Backend and media developer'},
+    {'username': 'amirm', 'email': 'amir@example.com', 'bio': 'Frontend developer'},
+    {'username': 'arvin', 'email': 'arvin@example.com', 'bio': 'Product owner'},
 ]
 
-GROUP_NAME = 'گروه تست برنامه‌نویسان'
+GROUP_NAME = 'Developers Test Group'
 
-CHANNEL_NAME = 'کانال تحلیل و طراحی سیستم‌ها'
-CHANNEL_DESCRIPTION = 'کانال نمونه برای نمایش تاپیک‌ها، نقش‌ها و دسترسی‌ها'
+CHANNEL_NAME = 'Systems Analysis and Design'
+CHANNEL_DESCRIPTION = 'A sample channel showing topics, roles and permissions'
 
 # Two topics, because one cannot demonstrate that a channel is a *collection*
 # of topics (US-4.5) and F-05's tab list has nothing to switch between.
-TOPIC_NAMES = ('عمومی', 'معماری')
+TOPIC_NAMES = ('General', 'Architecture')
 
 # One role holding some of the eight permissions and not others. That asymmetry
 # is the point: INT-2 needs an allowed case and a denied case for the same
 # member, and a role that grants everything demonstrates neither.
-ROLE_NAME = 'ناظر'
+ROLE_NAME = 'Moderator'
+
+# The sample conversation. Constants rather than literals at the call site for
+# the same reason the names above are: `_seed_*` keys on the text, so the text
+# is a lookup key and LEGACY_FIXTURES below has to name it.
+TOPIC_MESSAGES = (
+    "This topic is for the channel's general discussion.",
+    "Great — I will ask the frontend questions here, then.",
+)
+DIRECT_MESSAGES = (
+    "Hi Amir, how are the frontend tasks coming along?",
+    "Hi Majid! Did you get the backend containers up?",
+)
+GROUP_MESSAGE = "Everyone — here is the system architecture diagram for phase 2:"
+
 ROLE_PERMISSIONS = {
     'can_create_topic': True,
     'can_delete_message': True,
@@ -57,10 +71,39 @@ DUMMY_IMAGE = (
 )
 
 
+# The demo world was seeded in Persian until #127 made the interface English.
+#
+# Every `_seed_*` method below matches its fixture *by name*, and
+# `backend/entrypoint.sh` runs this command on every container start. So a bare
+# rename would not update the rows already out there — it would seed a second,
+# English group, channel, role and conversation *beside* the Persian ones, on
+# every teammate's volume, on every restart. Renaming first is what keeps "safe
+# to run against a database in any state" true across the rename itself.
+#
+# These are historical database values, not interface strings. The map is inert
+# once a database has been through it.
+LEGACY_FIXTURES = (
+    (Group, 'name', 'گروه تست برنامه‌نویسان', GROUP_NAME),
+    (Channel, 'name', 'کانال تحلیل و طراحی سیستم‌ها', CHANNEL_NAME),
+    (Channel, 'description', 'کانال نمونه برای نمایش تاپیک‌ها، نقش‌ها و دسترسی‌ها', CHANNEL_DESCRIPTION),
+    (Topic, 'name', 'عمومی', TOPIC_NAMES[0]),
+    (Topic, 'name', 'معماری', TOPIC_NAMES[1]),
+    (Role, 'name', 'ناظر', ROLE_NAME),
+    (Profile, 'bio', 'توسعه‌دهنده بک‌اند و رسانه', USERS[0]['bio']),
+    (Profile, 'bio', 'توسعه‌دهنده فرانت‌اند', USERS[1]['bio']),
+    (Profile, 'bio', 'مالک محصول', USERS[2]['bio']),
+    (Message, 'text', 'این تاپیک برای بحث‌های عمومی کانال است.', TOPIC_MESSAGES[0]),
+    (Message, 'text', 'عالیه! پس سوالای فرانت‌اند رو اینجا می‌پرسم.', TOPIC_MESSAGES[1]),
+    (Message, 'text', 'سلام امیر، تسک‌های فرانت‌اند چطور پیش میره؟', DIRECT_MESSAGES[0]),
+    (Message, 'text', 'سلام مجید! داکرهای بک‌اند رو دادی بالا؟', DIRECT_MESSAGES[1]),
+    (Message, 'text', 'بچه‌ها این عکس معماری سیستم برای فاز دومه:', GROUP_MESSAGE),
+)
+
+
 class Command(BaseCommand):
     help = (
-        'تزریق داده‌های اولیه (کاربران، گروه‌ها، مدیا و پیام‌ها) برای تست سیستم. '
-        'اجرای مجدد آن بی‌خطر است و رمز عبور کاربران نمونه را بازنشانی می‌کند.'
+        'Seed demo data (users, groups, media and messages) for testing. '
+        'Safe to re-run; it resets the demo users\' passwords.'
     )
 
     def add_arguments(self, parser):
@@ -68,14 +111,16 @@ class Command(BaseCommand):
             '--keep-passwords',
             action='store_true',
             help=(
-                'رمز عبور کاربران موجود را دست‌نخورده باقی می‌گذارد. '
-                'بدون این گزینه، رمز هر سه کاربر نمونه به testpass123 بازنشانی می‌شود.'
+                'Leave existing users\' passwords untouched. Without it all three '
+                'demo users are reset to testpass123.'
             ),
         )
 
     @transaction.atomic
     def handle(self, *args, **options):
-        self.stdout.write("در حال ساخت داده‌های اولیه...")
+        self.stdout.write("Seeding demo data...")
+
+        self._rename_legacy_fixtures()
 
         users = self._seed_users(keep_passwords=options['keep_passwords'])
         majid, amirm, arvin = users['majid'], users['amirm'], users['arvin']
@@ -89,16 +134,29 @@ class Command(BaseCommand):
         self._seed_role(channel=channel, holder=amirm)
         self._seed_topic_messages(topic=topics[0], majid=majid, amirm=amirm)
 
-        self.stdout.write(self.style.SUCCESS('داده‌های اولیه با موفقیت در دیتابیس ذخیره شدند!'))
+        self.stdout.write(self.style.SUCCESS('Demo data seeded successfully.'))
         self.stdout.write(
-            f"ورود با نام کاربری {', '.join(u['username'] for u in USERS)} "
-            f"و رمز عبور {DEMO_PASSWORD}"
+            f"Sign in as {', '.join(u['username'] for u in USERS)} "
+            f"with the password {DEMO_PASSWORD}"
         )
         self.stdout.write(
-            f"کانال نمونه: «{channel.name}» — مالک {channel.owner.username} "
-            f"(هر هشت دسترسی)، {amirm.username} با نقش «{ROLE_NAME}»، "
-            f"{arvin.username} بدون نقش"
+            f'Demo channel: "{channel.name}" — owner {channel.owner.username} '
+            f'(all eight permissions), {amirm.username} holding "{ROLE_NAME}", '
+            f'{arvin.username} with no role'
         )
+
+    def _rename_legacy_fixtures(self):
+        """Carry a Persian-seeded database over to the English fixtures (#127).
+
+        Runs before anything looks a fixture up, because every lookup below is
+        keyed on the very values this renames.
+        """
+        renamed = 0
+        for model, field, was, now in LEGACY_FIXTURES:
+            renamed += model.objects.filter(**{field: was}).update(**{field: now})
+
+        if renamed:
+            self.stdout.write(f"  carried {renamed} Persian-seeded row(s) over to the English fixtures")
 
     def _seed_users(self, keep_passwords):
         """The three accounts, keyed on username alone.
@@ -130,7 +188,7 @@ class Command(BaseCommand):
             Profile.objects.get_or_create(user=user, defaults={'bio': spec['bio']})
 
             users[spec['username']] = user
-            self.stdout.write(f"  کاربر {user.username}: {'ساخته شد' if created else 'از قبل موجود بود'}")
+            self.stdout.write(f"  user {user.username}: {'created' if created else 'already existed'}")
 
         return users
 
@@ -190,7 +248,7 @@ class Command(BaseCommand):
         for member in members:
             ChannelMember.objects.get_or_create(channel=channel, user=member)
 
-        self.stdout.write(f"  کانال {channel.name}: {len(members) + 1} عضو")
+        self.stdout.write(f"  channel {channel.name}: {len(members) + 1} members")
         return channel
 
     def _seed_topics(self, channel):
@@ -223,7 +281,7 @@ class Command(BaseCommand):
         role.save(update_fields=list(ROLE_PERMISSIONS))
 
         ChannelMember.objects.filter(channel=channel, user=holder).update(role=role)
-        self.stdout.write(f"  نقش {role.name}: به {holder.username} داده شد")
+        self.stdout.write(f"  role {role.name}: granted to {holder.username}")
 
         return role
 
@@ -234,10 +292,10 @@ class Command(BaseCommand):
         target and text — so a re-run matches rather than stacking a copy.
         """
         Message.objects.get_or_create(
-            sender=majid, topic=topic, text="این تاپیک برای بحث‌های عمومی کانال است."
+            sender=majid, topic=topic, text=TOPIC_MESSAGES[0]
         )
         Message.objects.get_or_create(
-            sender=amirm, topic=topic, text="عالیه! پس سوالای فرانت‌اند رو اینجا می‌پرسم."
+            sender=amirm, topic=topic, text=TOPIC_MESSAGES[1]
         )
 
     def _seed_messages(self, majid, amirm, group, media):
@@ -247,14 +305,14 @@ class Command(BaseCommand):
         last time instead of stacking a second copy of the conversation.
         """
         Message.objects.get_or_create(
-            sender=majid, recipient=amirm, text="سلام امیر، تسک‌های فرانت‌اند چطور پیش میره؟"
+            sender=majid, recipient=amirm, text=DIRECT_MESSAGES[0]
         )
         Message.objects.get_or_create(
-            sender=amirm, recipient=majid, text="سلام مجید! داکرهای بک‌اند رو دادی بالا؟"
+            sender=amirm, recipient=majid, text=DIRECT_MESSAGES[1]
         )
         Message.objects.get_or_create(
             sender=majid,
             group=group,
-            text="بچه‌ها این عکس معماری سیستم برای فاز دومه:",
+            text=GROUP_MESSAGE,
             defaults={'media': media},
         )

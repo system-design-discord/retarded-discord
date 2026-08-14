@@ -1,6 +1,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 
+from common import messages
 from messaging.serializers import MessageSerializer
 
 
@@ -19,7 +20,7 @@ class ScheduledMessageSerializer(MessageSerializer):
     def validate_scheduled_at(self, value):
         if value <= timezone.now():
             raise serializers.ValidationError(
-                "زمان‌بندی پیام باید برای زمانی در آینده باشد."
+                messages.SCHEDULE_MUST_BE_IN_THE_FUTURE
             )
 
         return value

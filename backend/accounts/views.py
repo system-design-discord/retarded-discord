@@ -9,6 +9,8 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from common import messages
+
 from .models import Profile
 from .serializers import (
     ProfileSerializer,
@@ -86,7 +88,7 @@ class LogoutView(APIView):
         token = request.data.get('refresh')
         if not token:
             return Response(
-                {"error": "توکن تازه‌سازی الزامی است."}, status=status.HTTP_400_BAD_REQUEST
+                {"error": messages.REFRESH_TOKEN_REQUIRED}, status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
@@ -163,6 +165,6 @@ class PrivacySettingsView(APIView):
             )
 
         return Response(
-            {"error": "مقدار نامعتبر است"},
+            {"error": messages.INVALID_VALUE},
             status=status.HTTP_400_BAD_REQUEST,
         )

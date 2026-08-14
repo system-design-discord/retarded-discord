@@ -3,6 +3,7 @@ import os
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
+from common import messages
 
 from .models import MediaFile
 
@@ -20,6 +21,8 @@ class MediaFileSerializer(serializers.ModelSerializer):
         ext = os.path.splitext(value.name)[1].lower()
 
         if ext not in allowed_extensions:
-            raise serializers.ValidationError(f"فرمت فایل مجاز نیست. فرمت‌های مجاز: {', '.join(allowed_extensions)}")
+            raise serializers.ValidationError(
+                messages.FILE_TYPE_NOT_ALLOWED.format(allowed=', '.join(allowed_extensions))
+            )
 
         return value

@@ -2,7 +2,8 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": [
     "react",
-    "oxc"
+    "oxc",
+    "jsx-a11y"
   ],
   "rules": {
     "react/rules-of-hooks": "error",
@@ -11,7 +12,11 @@
       {
         "allowConstantExport": true
       }
-    ]
+    ],
+    "jsx-a11y/click-events-have-key-events": "error",
+    "jsx-a11y/no-static-element-interactions": "error",
+    "jsx-a11y/label-has-associated-control": "off",
+    "jsx-a11y/no-autofocus": "off"
   },
   "ignorePatterns": [
     "node_modules/**",

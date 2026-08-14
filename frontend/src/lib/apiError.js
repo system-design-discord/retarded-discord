@@ -15,9 +15,9 @@
 // `error` joined `detail` and `non_field_errors` when `U-10` arrived.
 // `groups_app` hand-rolls its refusals as `{"error": "..."}` where everything
 // routed through `roles` answers `{"detail": "..."}`, and `accounts`' privacy
-// view does the same. Without it the group screens render *"error: تنها ادمین
-// گروه…"* — a field name in front of a sentence, naming a field that does not
-// exist. Normalising it in `services/groups.js` instead would have meant either
+// view does the same. Without it the group screens render *"error: Only the
+// group admin…"* — a field name in front of a sentence, naming a field that
+// does not exist. Normalising it in `services/groups.js` instead would have meant either
 // rewriting an axios error in flight or catching inside a service, and the
 // service layer's rule is that errors propagate.
 

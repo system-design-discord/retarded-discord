@@ -15,6 +15,7 @@ answer back to DRF in the shape it expects.
 
 from rest_framework.permissions import BasePermission
 
+from common import messages
 from roles import services
 
 
@@ -22,7 +23,7 @@ class HasChannelPermission(BasePermission):
     """Grants access when the caller holds `view.required_permission` in the
     channel `view.get_channel()` returns."""
 
-    message = "شما دسترسی لازم برای این عملیات را ندارید."
+    message = messages.NO_PERMISSION
 
     def has_permission(self, request, view):
         permission = getattr(view, 'required_permission', None)
@@ -36,7 +37,7 @@ class HasChannelPermission(BasePermission):
 class IsChannelMember(BasePermission):
     """Reading a channel needs membership, not a permission."""
 
-    message = "شما عضو این کانال نیستید."
+    message = messages.NOT_CHANNEL_MEMBER
 
     def has_permission(self, request, view):
         return services.is_channel_member(request.user, view.get_channel())

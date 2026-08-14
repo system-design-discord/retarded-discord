@@ -18,49 +18,41 @@ export const PERMISSIONS = [
   {
     key: 'can_send_media',
     label: 'Send media',
-    fa: 'ارسال رسانه',
     hint: 'Upload images and files into this channel (US-4.8, US-7.3).',
   },
   {
     key: 'can_delete_message',
     label: "Delete others' messages",
-    fa: 'حذف پیام دیگران',
     hint: 'Remove a message written by somebody else (US-3.6).',
   },
   {
     key: 'can_create_topic',
     label: 'Create topics',
-    fa: 'ایجاد تاپیک',
     hint: 'Add a new topic to this channel (US-4.5).',
   },
   {
     key: 'can_edit_channel',
     label: 'Edit the channel',
-    fa: 'ویرایش کانال',
     hint: 'Change the channel name, description and avatar (US-4.7, US-6.1).',
   },
   {
     key: 'can_remove_member',
     label: 'Remove members',
-    fa: 'حذف عضو',
     hint: 'Remove somebody from this channel (US-4.3).',
   },
   {
     key: 'can_add_member',
     label: 'Add members',
-    fa: 'افزودن عضو',
     hint: 'Add somebody to this channel, unless their own settings refuse it (US-4.4, SH.2).',
   },
   {
     key: 'can_change_role',
     label: 'Manage roles',
-    fa: 'تغییر نقش‌ها',
     hint: 'Create roles and assign them — the permission this screen itself needs (US-4.2, US-8.1).',
   },
   {
     key: 'can_delete_channel',
     label: 'Delete the channel',
-    fa: 'حذف کانال',
     hint: 'Delete this channel and everything in it (US-4.10, US-6.2).',
   },
 ];

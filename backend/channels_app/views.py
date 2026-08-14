@@ -19,7 +19,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 
 from accounts.models import Profile
-from common import events
+from common import events, messages
 from common.mixins import ChannelScopedMixin
 from common.permissions import HasChannelPermission, IsChannelMember
 
@@ -208,13 +208,13 @@ class ChannelMemberListCreateView(ChannelScopedMixin, generics.ListCreateAPIView
 
         user_id = request.data.get('user_id')
         if not user_id:
-            return Response({'user_id': "شناسه کاربر الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'user_id': messages.USER_ID_REQUIRED}, status=status.HTTP_400_BAD_REQUEST)
 
         target = get_object_or_404(User, pk=user_id)
 
         if ChannelMember.objects.filter(channel=channel, user=target).exists():
             return Response(
-                {'error': f"کاربر {target.username} از قبل عضو این کانال است."},
+                {'error': messages.ALREADY_CHANNEL_MEMBER.format(username=target.username)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -222,7 +222,7 @@ class ChannelMemberListCreateView(ChannelScopedMixin, generics.ListCreateAPIView
         profile, _ = Profile.objects.get_or_create(user=target)
         if not profile.allow_invites:
             return Response(
-                {'error': f"کاربر {target.username} اجازه اضافه شدن به کانال‌ها را بسته است."},
+                {'error': messages.USER_DISALLOWS_CHANNEL_INVITES.format(username=target.username)},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -264,7 +264,7 @@ class ChannelMemberDetailView(ChannelScopedMixin, generics.DestroyAPIView):
 
         if membership.channel.owner_id == membership.user_id:
             return Response(
-                {'error': "امکان حذف مالک کانال وجود ندارد."},
+                {'error': messages.CANNOT_REMOVE_CHANNEL_OWNER},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

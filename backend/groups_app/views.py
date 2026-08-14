@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import Profile
-from common import events
+from common import events, messages
 from roles import services as roles
 
 from .models import Group, GroupMember
@@ -41,7 +41,7 @@ class GroupDetailView(generics.RetrieveUpdateDestroyAPIView):
         if request.method in ['PUT', 'PATCH', 'DELETE']:
             permission = 'can_delete_channel' if request.method == 'DELETE' else 'can_edit_channel'
             if not roles.has_group_permission(request.user, obj, permission):
-                self.permission_denied(request, message="شما دسترسی لازم برای تغییر این گروه را ندارید.")
+                self.permission_denied(request, message=messages.NO_PERMISSION_TO_EDIT_GROUP)
 
 
 class GroupAddRemoveMemberView(APIView):
@@ -56,15 +56,15 @@ class GroupAddRemoveMemberView(APIView):
         if not any(roles.has_group_permission(request.user, group, p)
                    for p in ('can_add_member', 'can_remove_member')):
             return Response(
-                {"error": "تنها ادمین گروه می‌تواند اعضا را مدیریت کند."},
+                {"error": messages.ONLY_GROUP_ADMIN_MANAGES_MEMBERS},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         user_id = request.data.get("user_id")
-        action = request.data.get("action")  # 'add' یا 'remove'
+        action = request.data.get("action")  # 'add' or 'remove'
 
         if not user_id or action not in ['add', 'remove']:
-            return Response({"error": "پارامترهای ارسال شده معتبر نیستند."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": messages.INVALID_PARAMETERS}, status=status.HTTP_400_BAD_REQUEST)
 
         # ...and then the permission that actually matches what was asked for.
         roles.require_group_permission(
@@ -78,7 +78,7 @@ class GroupAddRemoveMemberView(APIView):
             target_profile, _ = Profile.objects.get_or_create(user=target_user)
             if not target_profile.allow_invites:
                 return Response(
-                    {"error": f"کاربر {target_user.username} اجازه اضافه شدن به گروه‌ها را بسته است."},
+                    {"error": messages.USER_DISALLOWS_GROUP_INVITES.format(username=target_user.username)},
                     status=status.HTTP_403_FORBIDDEN
                 )
 
@@ -95,9 +95,15 @@ class GroupAddRemoveMemberView(APIView):
                 actor=request.user,
             )
 
-            return Response({"message": f"کاربر {target_user.username} به گروه اضافه شد."}, status=status.HTTP_200_OK)
+            return Response(
+                {"message": messages.USER_ADDED_TO_GROUP.format(username=target_user.username)},
+                status=status.HTTP_200_OK,
+            )
         elif action == 'remove':
             if target_user == group.admin:
-                return Response({"error": "امکان حذف ادمین اصلی وجود ندارد."}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"error": messages.CANNOT_REMOVE_GROUP_ADMIN}, status=status.HTTP_400_BAD_REQUEST)
             group.members.remove(target_user)
-            return Response({"message": f"کاربر {target_user.username} از گروه حذف شد."}, status=status.HTTP_200_OK)
+            return Response(
+                {"message": messages.USER_REMOVED_FROM_GROUP.format(username=target_user.username)},
+                status=status.HTTP_200_OK,
+            )

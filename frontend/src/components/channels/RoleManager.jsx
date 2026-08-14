@@ -32,7 +32,7 @@ import { EmptyState } from '../chat/primitives';
 function PermissionGrid({ role, heldByActor, disabled, onToggle }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 mt-3">
-      {PERMISSIONS.map(({ key, label, fa, hint }) => {
+      {PERMISSIONS.map(({ key, label, hint }) => {
         // You cannot grant what you do not hold (US-8.2). Revoking is always
         // allowed — taking away less than you have is never an escalation.
         const wouldGrant = !role[key];
@@ -55,7 +55,7 @@ function PermissionGrid({ role, heldByActor, disabled, onToggle }) {
             />
             <span className="min-w-0">
               <span className="block text-xs font-medium text-slate-200">
-                {label} <span className="text-slate-500">· {fa}</span>
+                {label}
               </span>
               {/* The API key, shown on purpose: the acceptance criterion is
                   that the eight toggles map one-to-one onto the model

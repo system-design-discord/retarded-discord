@@ -12,6 +12,8 @@ Nothing here is imported by `messaging`, `groups_app`, `channels_app` or
 
 from django.contrib.auth import get_user_model
 
+from common import messages
+
 from .models import Notification
 from .services import notify, notify_many
 
@@ -53,16 +55,21 @@ def _describe(message):
     sender = message.sender.username
 
     if message.group_id is not None:
-        return f"پیام جدید از {sender} در گروه {message.group.name}", f'/chat/{message.group_id}'
+        return (
+            messages.NOTIFICATION_NEW_GROUP_MESSAGE.format(sender=sender, group=message.group.name),
+            f'/chat/{message.group_id}',
+        )
 
     if message.topic_id is not None:
         topic = message.topic
         return (
-            f"پیام جدید از {sender} در {topic.channel.name} › {topic.name}",
+            messages.NOTIFICATION_NEW_TOPIC_MESSAGE.format(
+                sender=sender, channel=topic.channel.name, topic=topic.name
+            ),
             f'/channels?channel={topic.channel_id}&topic={topic.pk}',
         )
 
-    return f"پیام جدید از {sender}", f'/dms?user={message.sender_id}'
+    return messages.NOTIFICATION_NEW_DIRECT_MESSAGE.format(sender=sender), f'/dms?user={message.sender_id}'
 
 
 def on_message_created(message, **_):
@@ -94,7 +101,7 @@ def on_member_added(user, actor=None, channel=None, group=None, **_):
     notify(
         user,
         Notification.Kind.MEMBER_ADDED,
-        f"شما به {where} اضافه شدید.",
+        messages.NOTIFICATION_ADDED_TO.format(where=where),
         link=link,
         actor=actor,
     )
@@ -107,12 +114,12 @@ def on_role_changed(channel, user, role=None, actor=None, **_):
     `SET_NULL`s its holders, and being told you now hold nothing matters more
     than being told you hold something.
     """
-    named = role.name if role is not None else "بدون نقش"
+    named = role.name if role is not None else messages.NO_ROLE
 
     notify(
         user,
         Notification.Kind.ROLE_CHANGED,
-        f"نقش شما در {channel.name} به «{named}» تغییر کرد.",
+        messages.NOTIFICATION_ROLE_CHANGED.format(channel=channel.name, role=named),
         link='/channels',
         actor=actor,
     )

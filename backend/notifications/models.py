@@ -33,9 +33,9 @@ class Notification(models.Model):
         category nothing filters on.
         """
 
-        MESSAGE = 'message', "پیام جدید"
-        MEMBER_ADDED = 'member_added', "افزوده شدن به گروه یا کانال"
-        ROLE_CHANGED = 'role_changed', "تغییر نقش"
+        MESSAGE = 'message', "New message"
+        MEMBER_ADDED = 'member_added', "Added to a group or channel"
+        ROLE_CHANGED = 'role_changed', "Role changed"
 
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='notifications', verbose_name="کاربر"
