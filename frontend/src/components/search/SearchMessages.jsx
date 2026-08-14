@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 
-// A hit's `conversation.kind` is one of the three targets a message can have.
-// The route each one opens is the best the SPA can currently reach: F-03, F-04
-// and F-05 are the cards that add per-conversation URLs, and until they land a
-// direct message can only be opened at the DM screen rather than at the hit.
+// A hit's `conversation.kind` is one of the three targets a message can have,
+// and each one now has a URL that opens the conversation itself. F-05 gave the
+// topic case a real destination: `/channels/<id>?topic=<id>` is the channel
+// view with that topic selected, which is why the active topic lives in a query
+// parameter there rather than in component state.
 const openAt = ({ kind, id, channel_id }) => {
   if (kind === 'group') return `/chat/${id}`;
-  if (kind === 'topic') return `/channels?channel=${channel_id}&topic=${id}`;
+  if (kind === 'topic') return `/channels/${channel_id}?topic=${id}`;
   return `/dms?user=${id}`;
 };
 
