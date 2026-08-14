@@ -8,6 +8,7 @@ blank, a topic name that is unique inside its channel — and every question of
 from rest_framework import serializers
 
 from accounts.serializers import UserSerializer
+from common import messages
 
 from .models import Channel, ChannelMember, Topic
 
@@ -28,7 +29,7 @@ class TopicSerializer(serializers.ModelSerializer):
     def validate_name(self, value):
         name = value.strip()
         if not name:
-            raise serializers.ValidationError("نام تاپیک نمی‌تواند خالی باشد.")
+            raise serializers.ValidationError(messages.TOPIC_NAME_REQUIRED)
 
         # The database enforces this too. Checking here turns what would be a
         # 500 from the unique constraint into a 400 that says which field.
@@ -37,7 +38,7 @@ class TopicSerializer(serializers.ModelSerializer):
         if self.instance is not None:
             clashes = clashes.exclude(pk=self.instance.pk)
         if clashes.exists():
-            raise serializers.ValidationError("تاپیکی با این نام در این کانال وجود دارد.")
+            raise serializers.ValidationError(messages.TOPIC_NAME_TAKEN)
 
         return name
 
@@ -69,7 +70,7 @@ class ChannelSerializer(serializers.ModelSerializer):
     def validate_name(self, value):
         name = value.strip()
         if not name:
-            raise serializers.ValidationError("نام کانال نمی‌تواند خالی باشد.")
+            raise serializers.ValidationError(messages.CHANNEL_NAME_REQUIRED)
         return name
 
 
