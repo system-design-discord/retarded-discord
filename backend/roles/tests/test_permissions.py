@@ -212,3 +212,102 @@ def test_channel_only_permissions_are_never_granted_over_a_group(user_factory):
 
     assert services.has_group_permission(admin, group, 'can_create_topic') is False
     assert services.has_group_permission(admin, group, 'can_change_role') is False
+
+
+# --------------------------------------------------- the media restriction (A-10)
+
+@pytest.mark.django_db
+def test_an_unrestricted_channel_lets_any_member_send_media(channel, member, membership):
+    """The default and the common case: no role, no restriction, no refusal.
+    Posting media is as open as posting text until an admin says otherwise."""
+    assert channel.media_restricted is False
+    assert services.may_send_media(member, channel) is True
+
+
+@pytest.mark.django_db
+def test_a_restricted_channel_refuses_a_member_without_the_permission(
+    channel, member, membership
+):
+    channel.media_restricted = True
+    channel.save(update_fields=['media_restricted'])
+
+    assert services.may_send_media(member, channel) is False
+
+
+@pytest.mark.django_db
+def test_a_restricted_channel_allows_a_member_holding_the_permission(
+    channel, member, membership
+):
+    channel.media_restricted = True
+    channel.save(update_fields=['media_restricted'])
+    grant(channel, membership, 'can_send_media')
+
+    assert services.may_send_media(member, channel) is True
+
+
+@pytest.mark.django_db
+def test_the_channel_owner_is_never_refused_media(channel, owner):
+    """No owner branch is written in `may_send_media` — this passes because
+    `has_permission` short-circuits on ownership. The test is here to pin that
+    the short-circuit is what carries it."""
+    channel.media_restricted = True
+    channel.save(update_fields=['media_restricted'])
+
+    assert services.may_send_media(owner, channel) is True
+
+
+@pytest.mark.django_db
+def test_a_restricted_channel_refuses_a_non_member(channel, outsider):
+    channel.media_restricted = True
+    channel.save(update_fields=['media_restricted'])
+
+    assert services.may_send_media(outsider, channel) is False
+
+
+@pytest.mark.django_db
+def test_granting_the_permission_takes_effect_without_a_restart(
+    channel, member, membership
+):
+    """Brief §5.8 — access levels are manageable without editing code. The same
+    call answers differently the moment the role row changes."""
+    channel.media_restricted = True
+    channel.save(update_fields=['media_restricted'])
+    assert services.may_send_media(member, channel) is False
+
+    grant(channel, membership, 'can_send_media')
+
+    assert services.may_send_media(member, channel) is True
+
+
+@pytest.mark.django_db
+def test_removing_the_restriction_re_opens_the_channel(channel, member, membership):
+    channel.media_restricted = True
+    channel.save(update_fields=['media_restricted'])
+    assert services.may_send_media(member, channel) is False
+
+    channel.media_restricted = False
+    channel.save(update_fields=['media_restricted'])
+
+    assert services.may_send_media(member, channel) is True
+
+
+@pytest.mark.django_db
+def test_require_send_media_raises_for_a_refused_member(channel, member, membership):
+    channel.media_restricted = True
+    channel.save(update_fields=['media_restricted'])
+
+    with pytest.raises(PermissionDenied):
+        services.require_send_media(member, channel)
+
+
+@pytest.mark.django_db
+def test_require_send_media_is_quiet_when_allowed(channel, member, membership):
+    assert services.require_send_media(member, channel) is None
+
+
+@pytest.mark.django_db
+def test_an_anonymous_caller_is_refused_even_in_an_unrestricted_channel(channel):
+    from django.contrib.auth.models import AnonymousUser
+
+    assert services.may_send_media(AnonymousUser(), channel) is False
+    assert services.may_send_media(None, channel) is False

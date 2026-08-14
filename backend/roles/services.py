@@ -23,6 +23,13 @@ Two shapes of subject exist in the product, so there are two shapes of call:
 * **Messages** are the third shape, and the only one that does not carry its own
   rule: a message's *context* decides which of the two above applies.
   `may_delete_message` does that dispatch, so `messaging/` never has to.
+
+Some rules are a *composition* rather than a single row, and they belong here for
+the same reason. `may_send_media` is the one: whether a file may be sent depends
+on the channel's restriction flag **and** the caller's permission, and a caller
+that read the flag itself and decided what it meant would be deciding its own
+access. `media_app`, `messaging` and `scheduling` all ask this module instead,
+which is what stops the three of them from disagreeing (`A-10`).
 """
 
 from rest_framework.exceptions import PermissionDenied
@@ -234,3 +241,38 @@ def require_delete_message(user, message):
     """`may_delete_message`, but raises so a view can simply call and continue."""
     if not may_delete_message(user, message):
         raise PermissionDenied("شما دسترسی لازم برای حذف این پیام را ندارید.")
+
+
+def may_send_media(user, channel):
+    """May `user` upload or attach a file in `channel`? — US-2.4, US-7.3 (A-10).
+
+    Two rows compose into one answer, and composing them is exactly why this
+    lives here rather than in `media_app`: the caller would otherwise have to
+    read `channel.media_restricted` itself and then decide what to do about it,
+    which is a module deciding permissions for itself (architecture.tex §5.1).
+
+    * An **unrestricted** channel is the default and the common case — every
+      member may send media, no role required, the same as posting text.
+    * A **restricted** channel narrows that to holders of `can_send_media`.
+
+    The channel admin is never refused, and there is deliberately no branch here
+    that says so: `has_permission` short-circuits on ownership, so the owner
+    holds `can_send_media` like the other seven.
+
+    Note that this is a channel rule and takes a channel. DMs and groups have no
+    equivalent — `GROUP_ADMIN_PERMISSIONS` excludes `can_send_media` on purpose —
+    so a caller with a `recipient` or `group` target must not route through here.
+    """
+    if user is None or not user.is_authenticated:
+        return False
+
+    if not channel.media_restricted:
+        return True
+
+    return has_permission(user, channel, 'can_send_media')
+
+
+def require_send_media(user, channel):
+    """`may_send_media`, but raises so a view can simply call and continue."""
+    if not may_send_media(user, channel):
+        raise PermissionDenied("ارسال رسانه در این کانال محدود شده است.")
