@@ -1,9 +1,11 @@
-"""Group access control, after it moved into roles.services.
+"""Group access control, decided in roles.services.
 
-These are regression tests for a refactor, so they assert the behaviour that
-was already true on main — same status codes, same response bodies. What
-changed is *where* the decision is made (architecture.tex §5.1), not what it
-decides.
+Most of these are regression tests for a refactor: the decision moved
+(architecture.tex §5.1) without changing what it decides. Editing and deleting
+the group are the exception — `#124` changed the rule itself, from the admin
+alone to any member, because doc.tex §4.6 and US-6.3/US-6.4 always said so and
+the code did not. Member management did not move: add, remove and delete-
+another's-message are still the admin's three.
 """
 
 import pytest
@@ -43,12 +45,13 @@ def test_the_admin_can_edit_the_group(auth_client, admin, group):
 
 
 @pytest.mark.django_db
-def test_an_ordinary_member_cannot_edit_the_group(auth_client, plain, group):
+def test_an_ordinary_member_can_edit_the_group(auth_client, plain, group):
+    """US-6.4 and doc.tex §4.6 — editing is a member right, not an admin one."""
     response = auth_client(plain).patch(f'/api/groups/{group.pk}/', {'name': 'renamed'}, format='json')
 
-    assert response.status_code == 403
+    assert response.status_code == 200
     group.refresh_from_db()
-    assert group.name == 'team'
+    assert group.name == 'renamed'
 
 
 @pytest.mark.django_db
@@ -58,9 +61,26 @@ def test_a_non_member_cannot_even_see_the_group(auth_client, outsider, group):
 
 
 @pytest.mark.django_db
-def test_only_the_admin_may_delete_the_group(auth_client, admin, plain, group):
-    assert auth_client(plain).delete(f'/api/groups/{group.pk}/').status_code == 403
+def test_any_member_may_delete_the_group(auth_client, plain, group):
+    """US-6.3 — "so that the group can be disbanded upon the members' agreement".
+    The agreement is reached between the members; the product does not ask for
+    it, so any one of them may act on it."""
+    assert auth_client(plain).delete(f'/api/groups/{group.pk}/').status_code == 204
+
+
+@pytest.mark.django_db
+def test_the_admin_may_delete_the_group_too(auth_client, admin, group):
     assert auth_client(admin).delete(f'/api/groups/{group.pk}/').status_code == 204
+
+
+@pytest.mark.django_db
+def test_a_non_member_can_neither_edit_nor_delete_the_group(auth_client, outsider, group):
+    """Widening edit and delete to every member must not widen them past the
+    membership line. Both are 404 rather than 403 for the reason above."""
+    assert auth_client(outsider).patch(
+        f'/api/groups/{group.pk}/', {'name': 'renamed'}, format='json'
+    ).status_code == 404
+    assert auth_client(outsider).delete(f'/api/groups/{group.pk}/').status_code == 404
 
 
 @pytest.mark.django_db

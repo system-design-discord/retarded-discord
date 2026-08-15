@@ -31,7 +31,9 @@ import { readApiError } from '../lib/apiError';
 // **`isAdmin` is computed here** rather than passed in, because there is no
 // `groups/<id>/me/permissions/` for a group the way there is for a channel:
 // admin-ness is derived from the payload, and deriving it in one place is what
-// stops three screens deriving it three ways.
+// stops three screens deriving it three ways. Since #124 it answers a narrower
+// question than it used to — add and remove a member, and nothing else. Editing
+// and deleting the group are every member's, so neither consults it.
 
 export default function useGroup(groupId) {
   const { user } = useContext(AuthContext);
@@ -84,7 +86,7 @@ export default function useGroup(groupId) {
     [refresh],
   );
 
-  /** US-6.4 — rename or re-describe. Admin only; the server decides. */
+  /** US-6.4 — rename or re-describe. Any member may; the server decides. */
   const update = useCallback(
     (body) => guard(() => updateGroup(groupId, body), 'The group could not be updated.'),
     [groupId, guard],
@@ -107,7 +109,8 @@ export default function useGroup(groupId) {
     [groupId, guard],
   );
 
-  /** US-6.2 — delete the group. Does not refresh; the caller navigates away. */
+  /** US-6.3 — delete the group. Any member may. Does not refresh; the caller
+      navigates away. */
   const remove = useCallback(async () => {
     try {
       await deleteGroup(groupId);

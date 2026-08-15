@@ -32,7 +32,8 @@ import { fetchAllPages } from '../lib/pagination';
 //
 // Nothing here decides access. The list is scoped by `GroupListCreateView` to
 // groups the caller belongs to, edit and delete are gated on
-// `roles.has_group_permission`, and every refusal below is the server's.
+// `roles.may_edit_group` / `roles.may_delete_group` — which is *membership*,
+// not the admin flag (#124) — and every refusal below is the server's.
 
 /** Groups the caller belongs to, across all pages. */
 export function listGroups() {

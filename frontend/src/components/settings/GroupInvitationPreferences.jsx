@@ -1,13 +1,53 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { getAllowInvites, setAllowInvites as saveAllowInvites } from '../../services/privacy';
+import { readApiError } from '../../lib/apiError';
 import NavSidebar from '../layout/NavSidebar';
 import SettingsTabs from './SettingsTabs';
 
+// US-5.4 / SH.2 and doc.tex §4.5 — "A user may choose not to allow anyone to
+// add them to a group."
+//
+// **The pending-invitations half of this screen is gone (#100).** It listed
+// invitations from `groups/invites/pending/` and answered them at
+// `groups/invites/<id>/<action>/`, and all four endpoints this file called were
+// 404s: there is no invite/approval flow in the backend and there will not be
+// one. Execution-plan deviation 30 settled that on doc.tex rather than on the
+// wireframe — §4.5's rule is a boolean opt-out checked when a member is added,
+// not an invitation that is sent, queued and then answered — so the card is a
+// removal. `#133` cut the matching Accept/Decline buttons off the notification
+// row for the same reason.
+//
+// Removing the list also took the SPA's last raw read of a paginated body with
+// it (#102). `setPendingInvites(invitesRes.data || [])` was issue #77's pattern
+// surviving in the one place nobody could observe it, because the endpoint it
+// read 404'd before the parse ever ran.
+//
+// **Four options become two, and that is the honest number.** The wireframe
+// draws Everyone / Friends or contacts only / Ask for my approval / No one.
+// `Profile.allow_invites` is a boolean, so only the first and the last are
+// answerable: there is no friends or contacts concept in `ERD.tex`, and *ask
+// for my approval* is precisely the flow deviation 30 refuses to build. Two
+// radios that mean something beat four where two are decoration.
+
+const OPTIONS = [
+  {
+    id: 'everyone',
+    value: true,
+    label: 'Everyone',
+    hint: 'Any user can add you to a group directly.',
+  },
+  {
+    id: 'no-one',
+    value: false,
+    label: 'No one',
+    hint: 'Disable group invitations entirely: no user may add you to a group.',
+  },
+];
+
 const GroupInvitationPreferences = () => {
-  // Mapping directly to the allow_invites requirement in the card
-  const [allowInvites, setAllowInvites] = useState('approval');
-  const [pendingInvites, setPendingInvites] = useState([]);
-  
+  // `Profile.allow_invites` — a boolean, so this is one too.
+  const [allowInvites, setAllowInvites] = useState(true);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
@@ -15,17 +55,12 @@ const GroupInvitationPreferences = () => {
   useEffect(() => {
     const fetchInvitationData = async () => {
       try {
-        const [prefsRes, invitesRes] = await Promise.all([
-          api.get('auth/preferences/'),
-          api.get('groups/invites/pending/')
-        ]);
-        // Map the API's allow_invites field to our state
-        if (prefsRes.data.allow_invites) {
-          setAllowInvites(prefsRes.data.allow_invites);
-        }
-        setPendingInvites(invitesRes.data || []);
-      } catch (err) {
-        setFeedback({ type: 'error', message: 'Failed to load invitation data.' });
+        setAllowInvites(await getAllowInvites());
+      } catch (caught) {
+        setFeedback({
+          type: 'error',
+          message: readApiError(caught, 'Your invitation preference could not be loaded.'),
+        });
       } finally {
         setIsLoading(false);
       }
@@ -39,23 +74,16 @@ const GroupInvitationPreferences = () => {
     setFeedback({ type: '', message: '' });
 
     try {
-      await api.patch('auth/preferences/', { allow_invites: allowInvites });
+      // Seed from what was stored, not from what was sent.
+      setAllowInvites(await saveAllowInvites(allowInvites));
       setFeedback({ type: 'success', message: 'Invitation preferences updated.' });
-    } catch (err) {
-      const errorMsg = err.response?.data?.allow_invites?.[0] || err.response?.data?.detail || 'An error occurred while saving.';
-      setFeedback({ type: 'error', message: errorMsg });
+    } catch (caught) {
+      setFeedback({
+        type: 'error',
+        message: readApiError(caught, 'Your invitation preference could not be saved.'),
+      });
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleInviteAction = async (id, action) => {
-    try {
-      await api.post(`groups/invites/${id}/${action}/`);
-      setPendingInvites(prev => prev.filter(invite => invite.id !== id));
-      setFeedback({ type: 'success', message: `Invitation ${action}ed.` });
-    } catch (err) {
-      setFeedback({ type: 'error', message: `Failed to ${action} invitation.` });
     }
   };
 
@@ -90,51 +118,27 @@ const GroupInvitationPreferences = () => {
           <form onSubmit={handleSave} className="space-y-8">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
               <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-6">Who Can Add Me to Groups</h3>
+              <p className="text-slate-400 text-xs mb-4">
+                This setting applies to every group invite sent to you across the system. Nobody can
+                read it but you — an inviter finds out only when the API refuses them.
+              </p>
               <div className="space-y-3">
-                {[
-                  { id: 'everyone', label: 'Everyone' },
-                  { id: 'friends', label: 'Friends / contacts only' },
-                  { id: 'approval', label: 'Ask for my approval' },
-                  { id: 'no-one', label: 'No one' }
-                ].map((option) => (
-                  <label key={option.id} className="flex items-center gap-3 p-4 border border-slate-800 rounded-xl hover:bg-slate-800/50 transition cursor-pointer">
-                    <input 
-                      type="radio" 
-                      name="allow_invites" 
-                      value={option.id} 
-                      checked={allowInvites === option.id} 
-                      onChange={(e) => setAllowInvites(e.target.value)} 
-                      className="w-4 h-4 accent-indigo-600 bg-slate-950 border-slate-700"
+                {OPTIONS.map((option) => (
+                  <label key={option.id} className="flex items-start gap-3 p-4 border border-slate-800 rounded-xl hover:bg-slate-800/50 transition cursor-pointer">
+                    <input
+                      type="radio"
+                      name="allow_invites"
+                      value={option.id}
+                      checked={allowInvites === option.value}
+                      onChange={() => setAllowInvites(option.value)}
+                      className="w-4 h-4 mt-0.5 shrink-0 accent-indigo-600 bg-slate-950 border-slate-700"
                     />
-                    <span className="text-sm font-medium text-slate-200">{option.label}</span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-slate-200">{option.label}</span>
+                      <span className="block text-xs text-slate-500 mt-0.5">{option.hint}</span>
+                    </span>
                   </label>
                 ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-6">Pending Group Invitations</h3>
-              <div className="space-y-3">
-                {pendingInvites.length > 0 ? (
-                  pendingInvites.map(invite => (
-                    <div key={invite.id} className="flex items-center justify-between p-4 border border-slate-800 rounded-xl bg-slate-950/50">
-                      <div>
-                        <strong className="text-sm text-slate-200 block">{invite.groupName || invite.group_name}</strong>
-                        <span className="text-xs text-slate-500">Invited by @{invite.inviter || invite.inviter_username}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button type="button" onClick={() => handleInviteAction(invite.id, 'accept')} className="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/30 rounded-lg text-xs font-semibold transition cursor-pointer">
-                          Accept
-                        </button>
-                        <button type="button" onClick={() => handleInviteAction(invite.id, 'decline')} className="px-3 py-1.5 bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-500/30 rounded-lg text-xs font-semibold transition cursor-pointer">
-                          Decline
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-slate-500 text-center py-4">You have no pending group invitations.</p>
-                )}
               </div>
             </div>
 

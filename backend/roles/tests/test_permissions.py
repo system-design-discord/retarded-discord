@@ -204,7 +204,13 @@ def test_an_ordinary_group_member_holds_none_of_them(user_factory):
 @pytest.mark.django_db
 def test_channel_only_permissions_are_never_granted_over_a_group(user_factory):
     """A group has no topics and no per-channel media rule, so asking is always
-    a no — better than quietly answering yes because the caller is the admin."""
+    a no — better than quietly answering yes because the caller is the admin.
+
+    `can_edit_channel` and `can_delete_channel` are in the list for a different
+    reason: they used to answer the group's edit and delete, and #124 moved both
+    to `may_edit_group` / `may_delete_group`. Asking for them here must stay a
+    no, or the old rule survives under its old name.
+    """
     from groups_app.models import Group
 
     admin = user_factory('gadmin')
@@ -212,6 +218,37 @@ def test_channel_only_permissions_are_never_granted_over_a_group(user_factory):
 
     assert services.has_group_permission(admin, group, 'can_create_topic') is False
     assert services.has_group_permission(admin, group, 'can_change_role') is False
+    assert services.has_group_permission(admin, group, 'can_edit_channel') is False
+    assert services.has_group_permission(admin, group, 'can_delete_channel') is False
+
+
+@pytest.mark.django_db
+def test_any_member_may_edit_and_delete_the_group(user_factory):
+    """doc.tex §4.6, US-6.3 and US-6.4 — both are member rights, not admin ones."""
+    from groups_app.models import Group
+
+    admin = user_factory('gadmin')
+    plain = user_factory('plain')
+    group = Group.objects.create_with_admin(admin=admin, name='team')
+    group.members.add(admin, plain)
+
+    assert services.may_edit_group(admin, group) is True
+    assert services.may_edit_group(plain, group) is True
+    assert services.may_delete_group(admin, group) is True
+    assert services.may_delete_group(plain, group) is True
+
+
+@pytest.mark.django_db
+def test_a_non_member_may_neither_edit_nor_delete_the_group(user_factory):
+    from groups_app.models import Group
+
+    admin = user_factory('gadmin')
+    outsider = user_factory('outsider')
+    group = Group.objects.create_with_admin(admin=admin, name='team')
+    group.members.add(admin)
+
+    assert services.may_edit_group(outsider, group) is False
+    assert services.may_delete_group(outsider, group) is False
 
 
 # --------------------------------------------------- the media restriction (A-10)
