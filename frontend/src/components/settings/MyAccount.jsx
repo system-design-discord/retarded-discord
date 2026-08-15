@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../../services/api';
 import { getMyProfile, updateMyProfile } from '../../services/profile';
 import { readApiError } from '../../lib/apiError';
 import { AuthContext } from '../../context/AuthContext';
@@ -10,6 +9,12 @@ import SettingsTabs from './SettingsTabs';
 // #96 — this screen saved with `PATCH auth/me/`, which is a 405, on an
 // assumption its own comment admitted to. The own profile is `/api/profile/`
 // and `services/profile` is the only file that names it.
+//
+// #98 — the Change Password section is gone rather than wired. It posted to
+// `auth/password/change/`, which is a 404 because no such endpoint was ever
+// written, and none is being written: no user story asks for password change
+// and doc.tex names it nowhere. That makes this a removal like #100, not an
+// implementation.
 
 const MyAccount = () => {
   const { logout } = useContext(AuthContext);
@@ -23,7 +28,6 @@ const MyAccount = () => {
   };
   
   const [accountInfo, setAccountInfo] = useState({ username: '', email: '' });
-  const [passwords, setPasswords] = useState({ current: '', new: '' });
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -52,17 +56,6 @@ const MyAccount = () => {
     try {
       const saved = await updateMyProfile(accountInfo);
       setAccountInfo({ username: saved.username, email: saved.email });
-
-      // If they also entered a new password, send a separate request
-      if (passwords.current && passwords.new) {
-        // Assuming there is a dedicated password change endpoint
-        await api.post('auth/password/change/', {
-          old_password: passwords.current,
-          new_password: passwords.new
-        });
-        setPasswords({ current: '', new: '' }); // Clear password fields on success
-      }
-
       setFeedback({ type: 'success', message: 'Account details updated successfully.' });
     } catch (err) {
       // Catch and display specific validation errors from the API (Acceptance Criteria).
@@ -94,7 +87,7 @@ const MyAccount = () => {
           
           <div className="border-b border-slate-800 pb-6">
             <h1 className="text-3xl font-extrabold text-white mb-2">My Account</h1>
-            <p className="text-slate-400 text-sm">Manage your account identity, password, and login session.</p>
+            <p className="text-slate-400 text-sm">Manage your account identity and your login session.</p>
           </div>
 
           {/* Validation Feedback Banner */}
@@ -130,32 +123,6 @@ const MyAccount = () => {
                     value={accountInfo.email} 
                     onChange={e => setAccountInfo({...accountInfo, email: e.target.value})}
                     className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-indigo-500 transition text-sm" 
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Password Section */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-4">Change Password</h3>
-              <p className="text-xs text-slate-500 mb-4">Leave these blank if you do not want to change your password.</p>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Current Password</label>
-                  <input 
-                    type="password" 
-                    value={passwords.current} 
-                    onChange={e => setPasswords({...passwords, current: e.target.value})} 
-                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-indigo-500 transition text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-400 text-xs font-bold uppercase mb-2">New Password</label>
-                  <input 
-                    type="password" 
-                    value={passwords.new} 
-                    onChange={e => setPasswords({...passwords, new: e.target.value})} 
-                    className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 focus:outline-none focus:border-indigo-500 transition text-sm"
                   />
                 </div>
               </div>
