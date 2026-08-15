@@ -38,9 +38,21 @@ class GroupDetailView(generics.RetrieveUpdateDestroyAPIView):
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
         # architecture.tex §5.1: this module does not decide, it asks roles.
+        #
+        # US-6.3 and US-6.4 make both of these member rights, not admin ones —
+        # doc.tex §4.6: "groups can be deleted by any of their members. Editing
+        # their information is also done by these same people." The queryset
+        # above already scopes to membership, so in practice a non-member is a
+        # 404 before this runs; the ask stays because the *rule* is not this
+        # module's to know, and because it is the guard if the queryset ever
+        # widens.
         if request.method in ['PUT', 'PATCH', 'DELETE']:
-            permission = 'can_delete_channel' if request.method == 'DELETE' else 'can_edit_channel'
-            if not roles.has_group_permission(request.user, obj, permission):
+            allowed = (
+                roles.may_delete_group(request.user, obj)
+                if request.method == 'DELETE'
+                else roles.may_edit_group(request.user, obj)
+            )
+            if not allowed:
                 self.permission_denied(request, message=messages.NO_PERMISSION_TO_EDIT_GROUP)
 
 

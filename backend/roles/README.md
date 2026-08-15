@@ -50,6 +50,9 @@ The channel owner implicitly holds all eight.
 | `require_channel_membership` / `require_group_membership` | The same two, but raising |
 | `has_group_permission(user, group, permission)` | A group has no role table, only an admin |
 | `require_group_permission(user, group, permission)` | The same, but raises |
+| `may_edit_group(user, group)` | `#124` — US-6.4, and it is *membership*, not the admin flag |
+| `may_delete_group(user, group)` | `#124` — US-6.3, the same rule |
+| `require_edit_group` / `require_delete_group` | The same two, but raising |
 | `may_delete_message(user, message)` | `R-05` — the message's context picks which rule above applies |
 | `require_delete_message(user, message)` | The same, but raises |
 | `may_edit_message(user, message)` | `M-06` — the author, and nobody else, in any context |
@@ -172,6 +175,34 @@ Note also that this takes a **channel**. Groups have no equivalent, and
 `GROUP_ADMIN_PERMISSIONS` deliberately excludes `can_send_media`, so routing a
 group upload through `has_group_permission` would refuse every member including
 the admin.
+
+## Editing and deleting a group
+
+A group's own edit and delete are **member** rights, and that is the one place
+this module's vocabulary does not follow the channel's. `doc.tex` §4.6 —
+*"groups can be deleted by any of their members. Editing their information is
+also done by these same people"* — with US-6.3 and US-6.4 saying it again from
+the member's side.
+
+| Act | Who may | Stories |
+|---|---|---|
+| Edit the group's name, description or image | any member | US-6.4, doc.tex §4.6 |
+| Delete the group | any member | US-6.3, doc.tex §4.6 |
+| Add a member, remove a member, delete another's message | the admin only | `user_stories_en.tex` §Assumptions |
+
+That last row is the whole of `GROUP_ADMIN_PERMISSIONS`, and the Assumptions
+section closes the list explicitly: *"The only distinction between a group admin
+and regular members is the ability to remove members, add members, and delete
+others' messages."* Three powers.
+
+Until `#124` the first two rows were answered by
+`has_group_permission(user, group, 'can_edit_channel' | 'can_delete_channel')`.
+A group borrowing a channel's permission *name* is harmless; it borrowed the
+channel's *rule* with it, and an ordinary member got 403 on both. They are named
+predicates now so there is nothing left to borrow.
+
+A non-member gets **404, not 403**, from `GroupDetailView` — the queryset is
+scoped to membership, so "no such group" and "not yours" are the same reply.
 
 ## Status
 

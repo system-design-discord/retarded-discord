@@ -19,7 +19,10 @@ Two shapes of subject exist in the product, so there are two shapes of call:
 * **Groups** have no role table (US-5.x only ever names an admin), so
   `has_group_permission` is a thin facade over that one rule. It lives here
   rather than in groups_app for exactly the reason above — the decision belongs
-  to this module even when the rule is simple.
+  to this module even when the rule is simple. Not every group rule is the
+  admin's, though: `may_edit_group` and `may_delete_group` are *member* rights
+  (doc.tex §4.6), and they are named rather than reached through a permission so
+  that nothing has to borrow a channel's vocabulary to ask.
 * **Messages** are the third shape, and the only one that does not carry its own
   rule: a message's *context* decides which of the two above applies.
   `may_delete_message` does that dispatch, so `messaging/` never has to.
@@ -42,15 +45,15 @@ from roles.models import PERMISSION_FIELDS
 # Re-exported under the name the rest of the codebase reads better with.
 PERMISSIONS = PERMISSION_FIELDS
 
-# A group admin is the group's owner, so they hold everything that makes sense
-# for a group. There is no group-level media or topic concept, so the four
-# channel-only permissions are simply never asked about a group.
+# What a group admin holds that an ordinary member does not, and it is exactly
+# the three powers `user_stories_en.tex` §Assumptions for section 5 names:
+# "remove members, add members, and delete others' messages". Editing the group
+# and deleting it are deliberately **not** here — doc.tex §4.6 gives both to any
+# member, and `may_edit_group` / `may_delete_group` below answer them instead.
 GROUP_ADMIN_PERMISSIONS = frozenset({
     'can_delete_message',
     'can_remove_member',
     'can_add_member',
-    'can_edit_channel',
-    'can_delete_channel',
 })
 
 
@@ -153,8 +156,12 @@ def require_group_membership(user, group):
 
 
 def has_group_permission(user, group, permission):
-    """The group-shaped equivalent. The group admin holds the five permissions
-    that mean anything for a group; ordinary members hold none of them."""
+    """The group-shaped equivalent. The group admin holds the three permissions
+    that separate them from a member; ordinary members hold none of them.
+
+    Note what this does *not* answer. Editing and deleting the group are member
+    rights, not admin ones, so they are `may_edit_group` and `may_delete_group`
+    rather than a permission name asked through here."""
     _validate(permission)
 
     if user is None or not user.is_authenticated:
@@ -171,6 +178,47 @@ def has_group_permission(user, group, permission):
 def require_group_permission(user, group, permission):
     if not has_group_permission(user, group, permission):
         raise PermissionDenied(messages.NO_PERMISSION)
+
+
+def may_edit_group(user, group):
+    """May `user` edit this group's name, description or image? — US-6.4.
+
+    **Any member may.** doc.tex §4.6 is explicit — "groups can be deleted by any
+    of their members. Editing their information is also done by these same
+    people" — and `user_stories_en.tex` §Assumptions closes the admin's powers at
+    three, none of which is this one. A group is a conversation between equals
+    with one member holding the membership list; it is not a channel with an
+    owner.
+
+    That is why this is a predicate of its own rather than
+    `has_group_permission(user, group, 'can_edit_channel')`. Reusing the
+    channel's permission name made a group inherit the channel's *rule* along
+    with its vocabulary, and the channel's rule is the wrong one here.
+    """
+    return is_group_member(user, group)
+
+
+def require_edit_group(user, group):
+    """`may_edit_group`, but raises so a view can simply call and continue."""
+    if not may_edit_group(user, group):
+        raise PermissionDenied(messages.NO_PERMISSION_TO_EDIT_GROUP)
+
+
+def may_delete_group(user, group):
+    """May `user` delete this group? — US-6.3.
+
+    The same rule and the same sentence of doc.tex §4.6: "so that the group can
+    be disbanded upon the members' agreement". The agreement is a thing the
+    members reach between themselves, not a thing the product asks for, so any
+    one of them may act on it.
+    """
+    return is_group_member(user, group)
+
+
+def require_delete_group(user, group):
+    """`may_delete_group`, but raises so a view can simply call and continue."""
+    if not may_delete_group(user, group):
+        raise PermissionDenied(messages.NO_PERMISSION_TO_EDIT_GROUP)
 
 
 def may_edit_message(user, message):
