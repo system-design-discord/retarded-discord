@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getMyProfile, updateMyProfile } from '../../services/profile';
 import { readApiError } from '../../lib/apiError';
@@ -16,6 +16,12 @@ import NavSidebar from '../layout/NavSidebar';
 const EditProfile = () => {
   const navigate = useNavigate();
   const [bio, setBio] = useState('');
+  // #104 — the file input was bound to nothing at all: no onChange, no ref, no
+  // state, and no mention of the file in the submit handler. Picking an avatar
+  // put a filename in the control and then silently discarded it, which is the
+  // most misleading of this screen's failures because it looked like it worked.
+  const [avatar, setAvatar] = useState(null);
+  const [avatarUrl, setAvatarUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
@@ -26,6 +32,7 @@ const EditProfile = () => {
       try {
         const profile = await getMyProfile();
         setBio(profile.bio);
+        setAvatarUrl(profile.avatar);
       } catch (err) {
         setFeedback({ type: 'error', message: readApiError(err, 'Failed to load profile data.') });
       } finally {
@@ -35,13 +42,31 @@ const EditProfile = () => {
     fetchProfile();
   }, []);
 
+  // The preview is an object URL over the chosen file, so it has to be revoked
+  // or the blob outlives the screen. Only ours are revoked — the saved avatar
+  // arrives as an ordinary /media/ URL.
+  const previewRef = useRef(null);
+
+  useEffect(() => () => {
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+  }, []);
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0] ?? null;
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    previewRef.current = file ? URL.createObjectURL(file) : null;
+    setAvatar(file);
+    setAvatarUrl(previewRef.current ?? avatarUrl);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
     setFeedback({ type: '', message: '' });
 
     try {
-      await updateMyProfile({ bio });
+      const saved = await updateMyProfile(avatar ? { bio, avatar } : { bio });
+      setAvatarUrl(saved.avatar);
       setFeedback({ type: 'success', message: 'Profile updated successfully!' });
       setTimeout(() => {
         navigate('/profile');
@@ -76,7 +101,19 @@ const EditProfile = () => {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-xs font-bold uppercase text-slate-400 mb-2">Profile Avatar</label>
-              <input type="file" accept="image/*" className="text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700 cursor-pointer" />
+              <div className="flex items-center gap-4">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="" className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500 shrink-0" />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-indigo-600/30 border-2 border-indigo-500 shrink-0" />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  className="min-w-0 text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700 cursor-pointer"
+                />
+              </div>
             </div>
 
             <div>
