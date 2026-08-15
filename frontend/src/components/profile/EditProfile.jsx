@@ -13,9 +13,15 @@ import NavSidebar from '../layout/NavSidebar';
 // everybody and threw away everything typed into it. Both ends go through
 // `services/profile` now, which is where that endpoint is named once.
 
+// The wireframe's cap, and the same number `accounts.serializers.BIO_MAX_LENGTH`
+// enforces. Counted here so a user is told before the request, refused there
+// because a UI limit is not a validation.
+const BIO_MAX_LENGTH = 200;
+
 const EditProfile = () => {
   const navigate = useNavigate();
   const [bio, setBio] = useState('');
+  const [username, setUsername] = useState('');
   // #104 — the file input was bound to nothing at all: no onChange, no ref, no
   // state, and no mention of the file in the submit handler. Picking an avatar
   // put a filename in the control and then silently discarded it, which is the
@@ -32,6 +38,7 @@ const EditProfile = () => {
       try {
         const profile = await getMyProfile();
         setBio(profile.bio);
+        setUsername(profile.username);
         setAvatarUrl(profile.avatar);
       } catch (err) {
         setFeedback({ type: 'error', message: readApiError(err, 'Failed to load profile data.') });
@@ -65,8 +72,10 @@ const EditProfile = () => {
     setFeedback({ type: '', message: '' });
 
     try {
-      const saved = await updateMyProfile(avatar ? { bio, avatar } : { bio });
+      const fields = { bio, username };
+      const saved = await updateMyProfile(avatar ? { ...fields, avatar } : fields);
       setAvatarUrl(saved.avatar);
+      setUsername(saved.username);
       setFeedback({ type: 'success', message: 'Profile updated successfully!' });
       setTimeout(() => {
         navigate('/profile');
@@ -116,15 +125,35 @@ const EditProfile = () => {
               </div>
             </div>
 
+            {/* #130 — the serializer has written this since A-02 and no screen
+                offered it, which is a field writable through the API and
+                invisible in the UI. */}
             <div>
-              <label className="block text-xs font-bold uppercase text-slate-400 mb-2">About Me (Bio)</label>
+              <label className="block text-xs font-bold uppercase text-slate-400 mb-2" htmlFor="edit-username">Username</label>
+              <input
+                id="edit-username"
+                type="text"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-400 mb-2" htmlFor="edit-bio">About Me (Bio)</label>
               <textarea
+                id="edit-bio"
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 rows="4"
+                maxLength={BIO_MAX_LENGTH}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition"
                 placeholder="Tell us about yourself..."
               ></textarea>
+              <p className="mt-2 text-right text-xs text-slate-500">
+                {bio.length} / {BIO_MAX_LENGTH} characters
+              </p>
             </div>
 
             <div className="flex gap-3">
