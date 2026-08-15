@@ -52,7 +52,8 @@ export default function GroupChat() {
           headerExtra={
             // Shown to everyone, not only the admin: the member aside below is
             // `hidden lg:block`, so on a phone this link is the only route to
-            // the member list at all. The screen is read-only for a non-admin.
+            // the member list at all — and since #124 it is also the route to
+            // editing and deleting the group, which every member may do.
             <Link
               to={`/groups/${groupId}/settings`}
               className="shrink-0 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-indigo-300 transition"

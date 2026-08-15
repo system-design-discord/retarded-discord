@@ -1,9 +1,7 @@
-import { useContext, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import CreateGroupModal from './CreateGroupModal';
 import useGroups from '../../hooks/useGroups';
-import { isGroupAdmin } from '../../services/groups';
-import { AuthContext } from '../../context/AuthContext';
 import { EmptyState } from '../chat/primitives';
 import NavSidebar from '../layout/NavSidebar';
 
@@ -24,7 +22,6 @@ import NavSidebar from '../layout/NavSidebar';
 
 export default function GroupsDashboard() {
   const navigate = useNavigate();
-  const { user } = useContext(AuthContext);
   const { groups, loading, error, setError, create } = useGroups();
   const [showModal, setShowModal] = useState(false);
 
@@ -92,16 +89,17 @@ export default function GroupsDashboard() {
                       <span className="text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-full">
                         {members} {members === 1 ? 'Member' : 'Members'}
                       </span>
-                      {/* Offered to the admin only. Hiding it is a courtesy —
-                          the server refuses everyone else either way. */}
-                      {isGroupAdmin(group, user) && (
-                        <Link
-                          to={`/groups/${group.id}/settings`}
-                          className="text-xs text-slate-400 hover:text-indigo-400 transition cursor-pointer"
-                        >
-                          ⚙️ Settings
-                        </Link>
-                      )}
+                      {/* Offered to every member since #124: the settings
+                          screen is where editing and deleting the group live,
+                          and both are member rights. Behind `isGroupAdmin` it
+                          was the admin's only, which left a member with no
+                          route to a story they are the subject of. */}
+                      <Link
+                        to={`/groups/${group.id}/settings`}
+                        className="text-xs text-slate-400 hover:text-indigo-400 transition cursor-pointer"
+                      >
+                        ⚙️ Settings
+                      </Link>
                     </div>
                   </div>
                 );

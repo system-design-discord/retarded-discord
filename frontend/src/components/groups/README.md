@@ -8,7 +8,7 @@ product, and most of what is below exists because of that.
 
 | | |
 |---|---|
-| `GroupsDashboard.jsx` | The groups you belong to. Create, open, and — for the admin — a link to settings. |
+| `GroupsDashboard.jsx` | The groups you belong to. Create, open, and a link to settings on every row. |
 | `GroupChat.jsx` | The conversation, through the shared `Chat`. Adds the name and the member aside. |
 | `GroupSettings.jsx` | `U-10`. Rename, re-describe, add and remove members, delete. Route `/groups/:groupId/settings`. |
 | `CreateGroupModal.jsx` | Name and description. Presentational; the write is the hook's. |
@@ -46,15 +46,23 @@ product, and most of what is below exists because of that.
 
 `/groups/:groupId/settings`, mirroring `/channels/:channelId/roles`. `GroupChat`'s member aside is
 `hidden lg:block`, so before this card a phone had no member list at all, let alone a way to manage
-one — the chat header's ⚙️ link is the way in and it is shown to everyone, because the screen is
-read-only for a non-admin. A dialog holding a rename form, a member list, a search and a danger zone
-is also not a dialog. And "the change survives a reload" is trivially demonstrable at a URL.
+one — the chat header's ⚙️ link is the way in and it is shown to everyone, which since `#124` is
+not merely a courtesy: a member reaching this screen can rename the group and delete it. A dialog
+holding a rename form, a member list, a search and a danger zone is also not a dialog. And "the
+change survives a reload" is trivially demonstrable at a URL.
 
 ## What none of this decides
 
-Not one permission. `roles.has_group_permission` gates the edit and the delete — under the names
-`can_edit_channel` and `can_delete_channel`, which a group reuses because it has no role table and
-`GroupMember.is_admin` is the whole of its authority — and the members view gates add and remove.
+Not one permission. `roles.may_edit_group` and `roles.may_delete_group` gate the edit and the
+delete, and the members view gates add and remove.
+
+**Which of those is the admin's is not the same answer for all four**, and `#124` is why. Editing
+and deleting the group are **member** rights — doc.tex §4.6, US-6.3, US-6.4 — while adding and
+removing a member is the admin's. The two used to be asked as
+`has_group_permission(group, 'can_edit_channel' | 'can_delete_channel')`, which handed a group the
+channel's rule along with the channel's name and refused an ordinary member both. So the only
+`isAdmin` guards left on `GroupSettings.jsx` are the ones around member management.
+
 There is **no `groups/<id>/me/permissions/`** the way there is for a channel, so `isGroupAdmin`
 compares `group.admin.id` to the signed-in user; that is the only answer a client can get, it lives
 in `services/groups.js`, and hiding a control with it is a courtesy on top of a refusal that happens

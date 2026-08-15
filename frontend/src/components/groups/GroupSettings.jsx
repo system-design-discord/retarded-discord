@@ -17,11 +17,17 @@ import { Avatar } from '../chat/primitives';
 // reload" is trivially true of a URL.
 //
 // **Nothing here is hidden to enforce anything.** The server decides all of it
-// — `roles.has_group_permission` for the edit and delete, the members view's
-// own gate for add and remove — and hiding a control a non-admin cannot use is
-// a courtesy on top of a refusal that happens anyway. The one deliberate
-// exception is the Remove button on the admin's own row, which *is* rendered
-// for the admin: see below.
+// — `roles.may_edit_group` / `may_delete_group` for the group itself, the
+// members view's own gate for add and remove — and hiding a control a non-admin
+// cannot use is a courtesy on top of a refusal that happens anyway. The one
+// deliberate exception is the Remove button on the admin's own row, which *is*
+// rendered for the admin: see below.
+//
+// **#124 moved the line these guards sit on.** Editing and deleting the group
+// are member rights (doc.tex §4.6, US-6.3, US-6.4) and were drawn as the
+// admin's, so a member opening this screen could read it and change nothing.
+// Only member management is `isAdmin`-guarded now, which is the one thing
+// user_stories_en.tex §Assumptions actually reserves.
 
 export default function GroupSettings() {
   const { groupId } = useParams();
@@ -194,68 +200,49 @@ export default function GroupSettings() {
               Group information
             </h2>
 
-            {isAdmin ? (
-              <form onSubmit={save} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase text-slate-400" htmlFor="name">
-                    Name
-                  </label>
-                  <input
-                    id="name"
-                    type="text"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label
-                    className="text-xs font-bold uppercase text-slate-400"
-                    htmlFor="description"
-                  >
-                    Description
-                  </label>
-                  <textarea
-                    id="description"
-                    rows={3}
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition resize-none"
-                  />
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="submit"
-                    disabled={!dirty || saving || !name.trim()}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2 rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
-                  >
-                    {saving ? 'Saving…' : 'Save'}
-                  </button>
-                  {saved && !dirty && <span className="text-xs text-emerald-400">Saved.</span>}
-                </div>
-              </form>
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <div className="text-xs text-slate-500">Name</div>
-                  <div className="text-sm text-slate-200 break-words">{group.name}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-slate-500">Description</div>
-                  <div className="text-sm text-slate-200 break-words">
-                    {group.description || 'No description.'}
-                  </div>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Only the group admin can edit this, and the API refuses everyone else whether or
-                  not the form is drawn.
-                </p>
+            {/* Every member gets the form, not only the admin — US-6.4 and
+                doc.tex §4.6. Until #124 this was a ternary with a read-only
+                branch whose copy told the member the API would refuse them,
+                which was true of the code and of nothing else. */}
+            <form onSubmit={save} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-slate-400" htmlFor="name">
+                  Name
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition"
+                />
               </div>
-            )}
-          </section>
 
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-slate-400" htmlFor="description">
+                  Description
+                </label>
+                <textarea
+                  id="description"
+                  rows={3}
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition resize-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={!dirty || saving || !name.trim()}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2 rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
+                >
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+                {saved && !dirty && <span className="text-xs text-emerald-400">Saved.</span>}
+              </div>
+            </form>
+          </section>
           {/* --------------------------------------------------- members */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
             <h2 className="text-xs font-bold uppercase text-slate-400 tracking-wider">Members</h2>
@@ -305,8 +292,9 @@ export default function GroupSettings() {
 
             {!isAdmin && (
               <p className="text-xs text-slate-500">
-                Only the admin can add or remove members. There is no way to leave a group yet — the
-                API has no endpoint for it.
+                Adding and removing members is the admin's, and it is the only thing here that is —
+                the group's information and the group itself are yours to change like anyone else's.
+                There is no way to leave a group yet; the API has no endpoint for it.
               </p>
             )}
           </section>
@@ -377,24 +365,27 @@ export default function GroupSettings() {
           )}
 
           {/* ----------------------------------------------- danger zone */}
-          {isAdmin && (
-            <section className="bg-slate-900 border border-rose-900/50 rounded-2xl p-5 space-y-3">
-              <h2 className="text-xs font-bold uppercase text-rose-400 tracking-wider">
-                Danger zone
-              </h2>
-              <p className="text-xs text-slate-400">
-                Deleting the group removes every membership and every message in it. The API answers
-                with no summary of what went, so this is the last time you will see it.
-              </p>
-              <button
-                type="button"
-                onClick={destroy}
-                className="bg-rose-600 hover:bg-rose-500 text-white font-semibold px-5 py-2 rounded-xl text-sm transition cursor-pointer"
-              >
-                Delete this group
-              </button>
-            </section>
-          )}
+          {/* US-6.3 — "the group can be disbanded upon the members' agreement".
+              The agreement happens between the members; the product does not
+              ask for it, so this is offered to every one of them. */}
+          <section className="bg-slate-900 border border-rose-900/50 rounded-2xl p-5 space-y-3">
+            <h2 className="text-xs font-bold uppercase text-rose-400 tracking-wider">
+              Danger zone
+            </h2>
+            <p className="text-xs text-slate-400">
+              Deleting the group removes every membership and every message in it, for everybody and
+              not only for you. Any member can do this and nobody is asked first, so agree with them
+              before you do. The API answers with no summary of what went, so this is the last time
+              you will see it.
+            </p>
+            <button
+              type="button"
+              onClick={destroy}
+              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold px-5 py-2 rounded-xl text-sm transition cursor-pointer"
+            >
+              Delete this group
+            </button>
+          </section>
         </div>
       </main>
     </div>
