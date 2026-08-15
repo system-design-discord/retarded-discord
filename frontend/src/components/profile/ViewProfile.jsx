@@ -86,19 +86,58 @@ const ViewProfile = () => {
             <div className="w-20 h-20 rounded-full bg-indigo-600/30 border-2 border-indigo-500 flex items-center justify-center font-extrabold text-2xl text-indigo-400">
               {profileUser.username ? profileUser.username[0].toUpperCase() : 'U'}
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-2xl font-extrabold text-white break-words">{profileUser.username}</h2>
-              <p className="text-xs text-indigo-400 font-semibold">{profileUser.role || 'Member'}</p>
-              {/* Only show email if it's your own profile or if the API explicitly returns it based on privacy settings */}
+              <p className="text-xs text-slate-400 break-words">@{profileUser.username}</p>
+              {/* Only show email if it's your own profile — PublicProfileSerializer
+                  omits it for everybody else, so this is never somebody's address
+                  handed to a stranger. */}
               {profileUser.email && (
                 <p className="text-xs text-slate-500 mt-0.5 break-words">{profileUser.email}</p>
               )}
             </div>
           </div>
 
+          {/* #130's one consequential omission: there was no way to start a
+              direct message from a profile, so the user directory on the DM
+              screen was the only entry to a conversation with anybody.
+              `?user=<id>` is the route SearchMessages and the directory already
+              open. This branch is unreachable until #101 gives another user's
+              profile a route and the right endpoint. */}
+          {!isOwnProfile && profileUser.id && (
+            <button
+              type="button"
+              onClick={() => navigate(`/dms?user=${profileUser.id}`)}
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition shadow-lg shadow-indigo-600/20 cursor-pointer"
+            >
+              Message
+            </button>
+          )}
+
           <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500">About Me</label>
             <p className="text-sm text-slate-300 break-words">{profileUser.bio || 'This user has not set a bio yet.'}</p>
+          </div>
+
+          {/* The wireframe's Profile Details block. Display name, status and
+              short tag are not here and will not be: `Profile` has no column
+              for any of them, and #130 settled them as cut from the wireframe
+              rather than built. Same for Add Friend and Mutual Context, which
+              need a friend entity ERD.tex does not have. */}
+          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-3">
+            <label className="text-xs font-bold uppercase text-slate-500">Profile Details</label>
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-500">Username</dt>
+                <dd className="text-slate-300 break-words text-right">{profileUser.username}</dd>
+              </div>
+              {profileUser.email && (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-slate-500">Email</dt>
+                  <dd className="text-slate-300 break-words text-right">{profileUser.email}</dd>
+                </div>
+              )}
+            </dl>
           </div>
 
           {/* Acceptance Criteria: your own profile shows the edit affordance and theirs does not */}
