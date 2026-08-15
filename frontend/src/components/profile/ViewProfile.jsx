@@ -83,9 +83,21 @@ const ViewProfile = () => {
       <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto">
         <div className="max-w-xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl space-y-6">
           <div className="flex items-center gap-5">
-            <div className="w-20 h-20 rounded-full bg-indigo-600/30 border-2 border-indigo-500 flex items-center justify-center font-extrabold text-2xl text-indigo-400">
-              {profileUser.username ? profileUser.username[0].toUpperCase() : 'U'}
-            </div>
+            {/* An avatar can be saved since #104, so the screen that shows the
+                profile has to render it — a letter where a picture was just
+                uploaded reads as the same silent failure. The initial stays as
+                the fallback for everybody who has not set one. */}
+            {profileUser.avatar ? (
+              <img
+                src={profileUser.avatar}
+                alt=""
+                className="w-20 h-20 rounded-full object-cover border-2 border-indigo-500 shrink-0"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-indigo-600/30 border-2 border-indigo-500 flex items-center justify-center font-extrabold text-2xl text-indigo-400 shrink-0">
+                {profileUser.username ? profileUser.username[0].toUpperCase() : 'U'}
+              </div>
+            )}
             <div className="min-w-0">
               <h2 className="text-2xl font-extrabold text-white break-words">{profileUser.username}</h2>
               <p className="text-xs text-slate-400 break-words">@{profileUser.username}</p>
