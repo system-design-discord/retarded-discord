@@ -70,6 +70,8 @@ MESSAGE_TEXT_REQUIRED = "Message text cannot be empty."
 PASSWORDS_DO_NOT_MATCH = "The two password fields did not match."
 REFRESH_TOKEN_REQUIRED = "A refresh token is required."
 INVALID_VALUE = "Invalid value."
+BIO_TOO_LONG = "A bio cannot be longer than {limit} characters."
+USERNAME_TAKEN = "This username is already taken."
 
 # --- Media ------------------------------------------------------------------
 

@@ -51,14 +51,48 @@ class PublicProfileSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+# The wireframe's Edit Profile screen counts the bio down from 200 characters.
+# The cap lives here rather than on `Profile.bio` on purpose: it is an input
+# rule, and a `max_length` on a `TextField` is a no-op in PostgreSQL that still
+# costs a migration (#130).
+BIO_MAX_LENGTH = 200
+
+
 class ProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     email = serializers.EmailField(source='user.email', required=False)
     username = serializers.CharField(source='user.username', required=False)
+    bio = serializers.CharField(
+        max_length=BIO_MAX_LENGTH,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        error_messages={
+            'max_length': messages.BIO_TOO_LONG.format(limit=BIO_MAX_LENGTH),
+        },
+    )
 
     class Meta:
         model = Profile
         fields = ['user', 'username', 'email', 'bio', 'avatar', 'allow_invites']
+
+    def validate_username(self, value):
+        """`update()` assigns straight onto `user.username`, so a duplicate is
+        an IntegrityError — a 500 rather than something a screen can show. It
+        was unreachable while no UI exposed the field; #130 exposes it.
+
+        A plain `UniqueValidator` will not do here. It excludes
+        `serializer.instance`, and this serializer's instance is the `Profile`,
+        not the `User` — so submitting your own current username, which the
+        account screen does on every save, would be refused as a clash with
+        yourself.
+        """
+        taken = User.objects.filter(username=value)
+        if self.instance is not None:
+            taken = taken.exclude(pk=self.instance.user_id)
+        if taken.exists():
+            raise serializers.ValidationError(messages.USERNAME_TAKEN)
+        return value
 
     def update(self, instance, validated_data):
         user_data = validated_data.pop('user', {})
