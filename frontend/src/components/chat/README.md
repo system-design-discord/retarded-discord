@@ -115,3 +115,10 @@ the exponential backoff with jitter, and the single token refresh a `4401` earns
 `POST /api/messages/`. Two rules in the hook are load-bearing: messages are **deduped by id**,
 because a direct message's channel-layer group is symmetric and fans back to its own sender, and
 they are **re-sorted by `created_at`**, because a frame can arrive after a later one.
+
+**Both rules apply to the HTTP path too, and `send` is where they were missing** (#137). It appended
+the created row unconditionally while `receive` deduped, so the author — and only the author — saw
+every message twice: the socket frame consistently beats the POST response back, so `receive` ran
+first and found nothing to dedupe against. `send` hands its row to `receive` now, which is what makes
+"one merge rule" checkable rather than remembered. The blind append also bypassed the sort, so a
+message written while an older frame was still in flight sorted wrongly as well.
