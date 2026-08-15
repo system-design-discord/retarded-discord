@@ -1,9 +1,15 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import { getMyProfile, updateMyProfile } from '../../services/profile';
+import { readApiError } from '../../lib/apiError';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
 import SettingsTabs from './SettingsTabs';
+
+// #96 — this screen saved with `PATCH auth/me/`, which is a 405, on an
+// assumption its own comment admitted to. The own profile is `/api/profile/`
+// and `services/profile` is the only file that names it.
 
 const MyAccount = () => {
   const { logout } = useContext(AuthContext);
@@ -27,13 +33,10 @@ const MyAccount = () => {
   useEffect(() => {
     const fetchAccountDetails = async () => {
       try {
-        const response = await api.get('auth/me/');
-        setAccountInfo({
-          username: response.data.username || '',
-          email: response.data.email || ''
-        });
+        const profile = await getMyProfile();
+        setAccountInfo({ username: profile.username, email: profile.email });
       } catch (err) {
-        setFeedback({ type: 'error', message: 'Failed to load account details.' });
+        setFeedback({ type: 'error', message: readApiError(err, 'Failed to load account details.') });
       } finally {
         setIsLoading(false);
       }
@@ -47,9 +50,9 @@ const MyAccount = () => {
     setFeedback({ type: '', message: '' });
 
     try {
-      // Assuming the backend endpoint for updating the user is a PATCH to auth/me/
-      await api.patch('auth/me/', accountInfo);
-      
+      const saved = await updateMyProfile(accountInfo);
+      setAccountInfo({ username: saved.username, email: saved.email });
+
       // If they also entered a new password, send a separate request
       if (passwords.current && passwords.new) {
         // Assuming there is a dedicated password change endpoint
@@ -62,15 +65,13 @@ const MyAccount = () => {
 
       setFeedback({ type: 'success', message: 'Account details updated successfully.' });
     } catch (err) {
-       // Catch and display specific validation errors from the API (Acceptance Criteria)
-      const errorMsg = err.response?.data?.detail 
-        || err.response?.data?.username?.[0] 
-        || err.response?.data?.email?.[0]
-        || err.response?.data?.old_password?.[0]
-        || err.response?.data?.new_password?.[0]
-        || 'An error occurred while saving your changes.';
-        
-      setFeedback({ type: 'error', message: errorMsg });
+      // Catch and display specific validation errors from the API (Acceptance Criteria).
+      // `readApiError` keeps the field name in front of the sentence, which is
+      // what tells a user *which* of the two boxes the server refused.
+      setFeedback({
+        type: 'error',
+        message: readApiError(err, 'An error occurred while saving your changes.'),
+      });
     } finally {
       setIsSaving(false);
     }

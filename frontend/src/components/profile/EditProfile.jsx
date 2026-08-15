@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../../services/api';
+import { getMyProfile, updateMyProfile } from '../../services/profile';
+import { readApiError } from '../../lib/apiError';
 import NavSidebar from '../layout/NavSidebar';
 
 // U-13 — this screen had no navigation at all: the only ways out were its own
 // Save and Cancel buttons, so a reload landed the user somewhere with no rail.
 // It renders the shared one now like every other screen.
+//
+// #96 and #97 — it read `auth/me/`, which does not carry `bio`, and saved with
+// a `PATCH` at the same route, which is a 405. So the editor opened blank for
+// everybody and threw away everything typed into it. Both ends go through
+// `services/profile` now, which is where that endpoint is named once.
 
 const EditProfile = () => {
   const navigate = useNavigate();
@@ -18,10 +24,10 @@ const EditProfile = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await api.get('auth/me/');
-        setBio(response.data.bio || '');
+        const profile = await getMyProfile();
+        setBio(profile.bio);
       } catch (err) {
-        setFeedback({ type: 'error', message: 'Failed to load profile data.' });
+        setFeedback({ type: 'error', message: readApiError(err, 'Failed to load profile data.') });
       } finally {
         setIsLoading(false);
       }
@@ -35,13 +41,13 @@ const EditProfile = () => {
     setFeedback({ type: '', message: '' });
 
     try {
-      await api.patch('auth/me/', { bio });
+      await updateMyProfile({ bio });
       setFeedback({ type: 'success', message: 'Profile updated successfully!' });
       setTimeout(() => {
         navigate('/profile');
       }, 1000);
     } catch (err) {
-      setFeedback({ type: 'error', message: 'Failed to update profile.' });
+      setFeedback({ type: 'error', message: readApiError(err, 'Failed to update profile.') });
     } finally {
       setIsSaving(false);
     }

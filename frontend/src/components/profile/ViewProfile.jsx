@@ -1,8 +1,19 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../../services/api';
+import { getMyProfile, normalizeProfile } from '../../services/profile';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
+
+// #97 — the own-profile read was `auth/me/`, which renders through
+// `UserSerializer` and therefore carries no `bio`, so this screen showed the
+// "has not set a bio yet" fallback to everybody including users who had set
+// one. It reads `/api/profile/` through `services/profile` now.
+//
+// The *other* user's branch below is deliberately untouched: its endpoint is
+// wrong and no route reaches it, which is #101 and somebody else's card. Both
+// branches already answer `normalizeProfile`'s shape, so fixing it there is a
+// one-line change rather than a rewrite of this file.
 
 const ViewProfile = () => {
   const navigate = useNavigate();
@@ -23,15 +34,14 @@ const ViewProfile = () => {
       setIsLoading(true);
       setIsNotFound(false);
       try {
-        let response;
         if (isOwnProfile) {
           // If no specific username is in the URL, fetch my own profile
-          response = await api.get('auth/me/');
+          setProfileUser(await getMyProfile());
         } else {
           // If a username is in the URL, fetch that specific user's public profile
-          response = await api.get(`users/profile/${targetUsername}/`);
+          const response = await api.get(`users/profile/${targetUsername}/`);
+          setProfileUser(normalizeProfile(response.data));
         }
-        setProfileUser(response.data);
       } catch (err) {
         if (err.response?.status === 404) {
           setIsNotFound(true);
