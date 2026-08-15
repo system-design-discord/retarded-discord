@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NavSidebar from '../layout/NavSidebar';
-import { Timestamp } from '../chat/primitives';
+import { EmptyState, Timestamp } from '../chat/primitives';
 import useNotifications from '../../hooks/useNotifications';
 
 // US-11.1, and since F-08 the live half of US-B1.2.
@@ -19,11 +19,38 @@ import useNotifications from '../../hooks/useNotifications';
 
 // The three kinds are `Notification.Kind` on the backend, and there are exactly
 // three because US-11.1 names exactly three.
+//
+// **A tab carries its own empty copy** (#105). The screen filtered by tab and
+// then said "You're all caught up! No notifications to display." whichever one
+// was open, so an empty *System* tab claimed the whole list was empty while
+// unread messages sat one tab away — a claim the rail's badge was visibly
+// contradicting at the same moment. Declaring the filter and the sentence
+// together is what stops a fifth tab arriving without one.
 const TABS = {
-  All: () => true,
-  Messages: (notification) => notification.type === 'message',
-  Invites: (notification) => notification.type === 'member_added',
-  System: (notification) => notification.type === 'role_changed',
+  All: {
+    match: () => true,
+    icon: '🔔',
+    title: "You're all caught up!",
+    hint: 'New messages, group and channel invitations, and role changes all appear here.',
+  },
+  Messages: {
+    match: (notification) => notification.type === 'message',
+    icon: '💬',
+    title: 'No message notifications',
+    hint: 'A new direct, group or channel message appears here.',
+  },
+  Invites: {
+    match: (notification) => notification.type === 'member_added',
+    icon: '✉️',
+    title: 'No invitations',
+    hint: 'Being added to a group or a channel appears here.',
+  },
+  System: {
+    match: (notification) => notification.type === 'role_changed',
+    icon: '⚙️',
+    title: 'Nothing from the system',
+    hint: 'A change to your role in a channel appears here.',
+  },
 };
 
 export default function NotificationsCenter() {
@@ -40,7 +67,8 @@ export default function NotificationsCenter() {
     if (notification.link) navigate(notification.link);
   };
 
-  const visible = notifications.filter(TABS[activeTab] ?? (() => true));
+  const tab = TABS[activeTab] ?? TABS.All;
+  const visible = notifications.filter(tab.match);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
@@ -154,8 +182,8 @@ export default function NotificationsCenter() {
                 );
               })
             ) : (
-              <div className="text-center text-slate-500 text-sm py-12 border border-slate-800/50 rounded-2xl bg-slate-900/20">
-                You&apos;re all caught up! No notifications to display.
+              <div className="py-12 border border-slate-800/50 rounded-2xl bg-slate-900/20">
+                <EmptyState icon={tab.icon} title={tab.title} hint={tab.hint} />
               </div>
             )}
           </div>
