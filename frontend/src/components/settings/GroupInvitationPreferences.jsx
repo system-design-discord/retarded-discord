@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../services/api';
+import { getAllowInvites, setAllowInvites as saveAllowInvites } from '../../services/privacy';
+import { readApiError } from '../../lib/apiError';
 import NavSidebar from '../layout/NavSidebar';
 import SettingsTabs from './SettingsTabs';
 
@@ -20,10 +21,32 @@ import SettingsTabs from './SettingsTabs';
 // it (#102). `setPendingInvites(invitesRes.data || [])` was issue #77's pattern
 // surviving in the one place nobody could observe it, because the endpoint it
 // read 404'd before the parse ever ran.
+//
+// **Four options become two, and that is the honest number.** The wireframe
+// draws Everyone / Friends or contacts only / Ask for my approval / No one.
+// `Profile.allow_invites` is a boolean, so only the first and the last are
+// answerable: there is no friends or contacts concept in `ERD.tex`, and *ask
+// for my approval* is precisely the flow deviation 30 refuses to build. Two
+// radios that mean something beat four where two are decoration.
+
+const OPTIONS = [
+  {
+    id: 'everyone',
+    value: true,
+    label: 'Everyone',
+    hint: 'Any user can add you to a group directly.',
+  },
+  {
+    id: 'no-one',
+    value: false,
+    label: 'No one',
+    hint: 'Disable group invitations entirely: no user may add you to a group.',
+  },
+];
 
 const GroupInvitationPreferences = () => {
-  // Mapping directly to the allow_invites requirement in the card
-  const [allowInvites, setAllowInvites] = useState('approval');
+  // `Profile.allow_invites` — a boolean, so this is one too.
+  const [allowInvites, setAllowInvites] = useState(true);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -32,13 +55,12 @@ const GroupInvitationPreferences = () => {
   useEffect(() => {
     const fetchInvitationData = async () => {
       try {
-        const prefsRes = await api.get('auth/preferences/');
-        // Map the API's allow_invites field to our state
-        if (prefsRes.data.allow_invites) {
-          setAllowInvites(prefsRes.data.allow_invites);
-        }
-      } catch (err) {
-        setFeedback({ type: 'error', message: 'Failed to load invitation data.' });
+        setAllowInvites(await getAllowInvites());
+      } catch (caught) {
+        setFeedback({
+          type: 'error',
+          message: readApiError(caught, 'Your invitation preference could not be loaded.'),
+        });
       } finally {
         setIsLoading(false);
       }
@@ -52,11 +74,14 @@ const GroupInvitationPreferences = () => {
     setFeedback({ type: '', message: '' });
 
     try {
-      await api.patch('auth/preferences/', { allow_invites: allowInvites });
+      // Seed from what was stored, not from what was sent.
+      setAllowInvites(await saveAllowInvites(allowInvites));
       setFeedback({ type: 'success', message: 'Invitation preferences updated.' });
-    } catch (err) {
-      const errorMsg = err.response?.data?.allow_invites?.[0] || err.response?.data?.detail || 'An error occurred while saving.';
-      setFeedback({ type: 'error', message: errorMsg });
+    } catch (caught) {
+      setFeedback({
+        type: 'error',
+        message: readApiError(caught, 'Your invitation preference could not be saved.'),
+      });
     } finally {
       setIsSaving(false);
     }
@@ -93,23 +118,25 @@ const GroupInvitationPreferences = () => {
           <form onSubmit={handleSave} className="space-y-8">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
               <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-6">Who Can Add Me to Groups</h3>
+              <p className="text-slate-400 text-xs mb-4">
+                This setting applies to every group invite sent to you across the system. Nobody can
+                read it but you — an inviter finds out only when the API refuses them.
+              </p>
               <div className="space-y-3">
-                {[
-                  { id: 'everyone', label: 'Everyone' },
-                  { id: 'friends', label: 'Friends / contacts only' },
-                  { id: 'approval', label: 'Ask for my approval' },
-                  { id: 'no-one', label: 'No one' }
-                ].map((option) => (
-                  <label key={option.id} className="flex items-center gap-3 p-4 border border-slate-800 rounded-xl hover:bg-slate-800/50 transition cursor-pointer">
-                    <input 
-                      type="radio" 
-                      name="allow_invites" 
-                      value={option.id} 
-                      checked={allowInvites === option.id} 
-                      onChange={(e) => setAllowInvites(e.target.value)} 
-                      className="w-4 h-4 accent-indigo-600 bg-slate-950 border-slate-700"
+                {OPTIONS.map((option) => (
+                  <label key={option.id} className="flex items-start gap-3 p-4 border border-slate-800 rounded-xl hover:bg-slate-800/50 transition cursor-pointer">
+                    <input
+                      type="radio"
+                      name="allow_invites"
+                      value={option.id}
+                      checked={allowInvites === option.value}
+                      onChange={() => setAllowInvites(option.value)}
+                      className="w-4 h-4 mt-0.5 shrink-0 accent-indigo-600 bg-slate-950 border-slate-700"
                     />
-                    <span className="text-sm font-medium text-slate-200">{option.label}</span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-slate-200">{option.label}</span>
+                      <span className="block text-xs text-slate-500 mt-0.5">{option.hint}</span>
+                    </span>
                   </label>
                 ))}
               </div>
