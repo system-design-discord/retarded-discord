@@ -148,6 +148,26 @@ The nine backend modules are the module decomposition in `../architecture.tex` �
 each. The rule that holds it together: **no module decides permissions for itself** — they all ask
 `roles`. See `backend/roles/README.md`.
 
+### Profiles and accounts
+
+There are two profile endpoints and they are not interchangeable, which cost this project four bugs
+(#96, #97, #101, #104):
+
+| Method | Endpoint | Does |
+|---|---|---|
+| `GET` | `/api/auth/me/` | The signed-in user as `{id, username, email}`, so the SPA can resolve its own id. **Read-only** — a `PATCH` here is a 405, and it carries no `bio` |
+| `GET` `PATCH` | `/api/profile/` | The caller's own profile: `username`, `email`, `bio`, `avatar`, `allow_invites`. This is the one to write to |
+| `GET` | `/api/profile/<user_id>/` | Another user's, keyed by **id**. Display fields only — never email, never `allow_invites` |
+| `GET` | `/api/settings/privacy/` | `allow_invites` on its own |
+
+`frontend/src/services/profile.js` is the only file in the SPA that names the first two, the same way
+`services/privacy.js` owns the fourth. A bio is capped at **200 characters** by
+`accounts.serializers.BIO_MAX_LENGTH` — a serializer rule, not a column, so the cap costs no
+migration. Writing an avatar promotes the request to multipart.
+
+**There is no password-change endpoint** and none is planned: no user story asks for one and
+`../doc.tex` names it nowhere (#98).
+
 ### Access control
 
 A role is a row in a table, not a constant in a source file, which is what makes access levels

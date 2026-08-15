@@ -95,9 +95,16 @@ export default function useConversation(kind, id) {
   //   * **Dedupe by id.** `realtime/publisher.py` fans a message out to the
   //     conversation's group, and for a direct message that group is
   //     `dm_group(sender, recipient)` — symmetric, so the sender's own socket
-  //     is in it. `send` below has already appended what the server returned,
-  //     and the poll may deliver the same row again. Without this the author
-  //     sees every message they write twice.
+  //     is in it. The poll may deliver the same row again too. Without this the
+  //     author sees every message they write twice.
+  //
+  //     `send` below routes the row the POST returned through here rather than
+  //     appending it, so there is one merge rule and not two (issue #137). It
+  //     used to append unconditionally, on the assumption that the response
+  //     lands before the socket frame — it does not: the gateway publishes on
+  //     commit and the frame travels back over an open connection while the
+  //     response is still being serialised, so the socket wins every time and
+  //     the author saw both copies for up to a poll interval.
   //   * **Keep `created_at` order.** `MessageList` renders the array as given
   //     and `listMessages` hands it over oldest-first; appending blindly is
   //     right almost always and wrong exactly when a frame arrives late, which
@@ -133,14 +140,13 @@ export default function useConversation(kind, id) {
     async (text) => {
       if (!target) return;
       try {
-        const created = await sendMessage(target, { text });
-        setMessages((current) => [...current, created]);
+        receive(await sendMessage(target, { text }));
         setError('');
       } catch (caught) {
         setError(readError(caught, 'The message could not be sent.'));
       }
     },
-    [target],
+    [target, receive],
   );
 
   const edit = useCallback(async (messageId, text) => {

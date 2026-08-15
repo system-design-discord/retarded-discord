@@ -1,15 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../../services/api';
+import { getMyProfile, updateMyProfile } from '../../services/profile';
+import { readApiError } from '../../lib/apiError';
 import NavSidebar from '../layout/NavSidebar';
 
 // U-13 — this screen had no navigation at all: the only ways out were its own
 // Save and Cancel buttons, so a reload landed the user somewhere with no rail.
 // It renders the shared one now like every other screen.
+//
+// #96 and #97 — it read `auth/me/`, which does not carry `bio`, and saved with
+// a `PATCH` at the same route, which is a 405. So the editor opened blank for
+// everybody and threw away everything typed into it. Both ends go through
+// `services/profile` now, which is where that endpoint is named once.
+
+// The wireframe's cap, and the same number `accounts.serializers.BIO_MAX_LENGTH`
+// enforces. Counted here so a user is told before the request, refused there
+// because a UI limit is not a validation.
+const BIO_MAX_LENGTH = 200;
 
 const EditProfile = () => {
   const navigate = useNavigate();
   const [bio, setBio] = useState('');
+  const [username, setUsername] = useState('');
+  // #104 — the file input was bound to nothing at all: no onChange, no ref, no
+  // state, and no mention of the file in the submit handler. Picking an avatar
+  // put a filename in the control and then silently discarded it, which is the
+  // most misleading of this screen's failures because it looked like it worked.
+  const [avatar, setAvatar] = useState(null);
+  const [avatarUrl, setAvatarUrl] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
@@ -18,10 +36,12 @@ const EditProfile = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await api.get('auth/me/');
-        setBio(response.data.bio || '');
+        const profile = await getMyProfile();
+        setBio(profile.bio);
+        setUsername(profile.username);
+        setAvatarUrl(profile.avatar);
       } catch (err) {
-        setFeedback({ type: 'error', message: 'Failed to load profile data.' });
+        setFeedback({ type: 'error', message: readApiError(err, 'Failed to load profile data.') });
       } finally {
         setIsLoading(false);
       }
@@ -29,19 +49,39 @@ const EditProfile = () => {
     fetchProfile();
   }, []);
 
+  // The preview is an object URL over the chosen file, so it has to be revoked
+  // or the blob outlives the screen. Only ours are revoked — the saved avatar
+  // arrives as an ordinary /media/ URL.
+  const previewRef = useRef(null);
+
+  useEffect(() => () => {
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+  }, []);
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0] ?? null;
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    previewRef.current = file ? URL.createObjectURL(file) : null;
+    setAvatar(file);
+    setAvatarUrl(previewRef.current ?? avatarUrl);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
     setFeedback({ type: '', message: '' });
 
     try {
-      await api.patch('auth/me/', { bio });
+      const fields = { bio, username };
+      const saved = await updateMyProfile(avatar ? { ...fields, avatar } : fields);
+      setAvatarUrl(saved.avatar);
+      setUsername(saved.username);
       setFeedback({ type: 'success', message: 'Profile updated successfully!' });
       setTimeout(() => {
         navigate('/profile');
       }, 1000);
     } catch (err) {
-      setFeedback({ type: 'error', message: 'Failed to update profile.' });
+      setFeedback({ type: 'error', message: readApiError(err, 'Failed to update profile.') });
     } finally {
       setIsSaving(false);
     }
@@ -70,18 +110,50 @@ const EditProfile = () => {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="block text-xs font-bold uppercase text-slate-400 mb-2">Profile Avatar</label>
-              <input type="file" accept="image/*" className="text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700 cursor-pointer" />
+              <div className="flex items-center gap-4">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="" className="w-16 h-16 rounded-full object-cover border-2 border-indigo-500 shrink-0" />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-indigo-600/30 border-2 border-indigo-500 shrink-0" />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  className="min-w-0 text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {/* #130 — the serializer has written this since A-02 and no screen
+                offered it, which is a field writable through the API and
+                invisible in the UI. */}
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-400 mb-2" htmlFor="edit-username">Username</label>
+              <input
+                id="edit-username"
+                type="text"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition"
+              />
             </div>
 
             <div>
-              <label className="block text-xs font-bold uppercase text-slate-400 mb-2">About Me (Bio)</label>
+              <label className="block text-xs font-bold uppercase text-slate-400 mb-2" htmlFor="edit-bio">About Me (Bio)</label>
               <textarea
+                id="edit-bio"
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 rows="4"
+                maxLength={BIO_MAX_LENGTH}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition"
                 placeholder="Tell us about yourself..."
               ></textarea>
+              <p className="mt-2 text-right text-xs text-slate-500">
+                {bio.length} / {BIO_MAX_LENGTH} characters
+              </p>
             </div>
 
             <div className="flex gap-3">
