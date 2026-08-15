@@ -3,11 +3,28 @@ import api from '../../services/api';
 import NavSidebar from '../layout/NavSidebar';
 import SettingsTabs from './SettingsTabs';
 
+// US-5.4 / SH.2 and doc.tex §4.5 — "A user may choose not to allow anyone to
+// add them to a group."
+//
+// **The pending-invitations half of this screen is gone (#100).** It listed
+// invitations from `groups/invites/pending/` and answered them at
+// `groups/invites/<id>/<action>/`, and all four endpoints this file called were
+// 404s: there is no invite/approval flow in the backend and there will not be
+// one. Execution-plan deviation 30 settled that on doc.tex rather than on the
+// wireframe — §4.5's rule is a boolean opt-out checked when a member is added,
+// not an invitation that is sent, queued and then answered — so the card is a
+// removal. `#133` cut the matching Accept/Decline buttons off the notification
+// row for the same reason.
+//
+// Removing the list also took the SPA's last raw read of a paginated body with
+// it (#102). `setPendingInvites(invitesRes.data || [])` was issue #77's pattern
+// surviving in the one place nobody could observe it, because the endpoint it
+// read 404'd before the parse ever ran.
+
 const GroupInvitationPreferences = () => {
   // Mapping directly to the allow_invites requirement in the card
   const [allowInvites, setAllowInvites] = useState('approval');
-  const [pendingInvites, setPendingInvites] = useState([]);
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
@@ -15,15 +32,11 @@ const GroupInvitationPreferences = () => {
   useEffect(() => {
     const fetchInvitationData = async () => {
       try {
-        const [prefsRes, invitesRes] = await Promise.all([
-          api.get('auth/preferences/'),
-          api.get('groups/invites/pending/')
-        ]);
+        const prefsRes = await api.get('auth/preferences/');
         // Map the API's allow_invites field to our state
         if (prefsRes.data.allow_invites) {
           setAllowInvites(prefsRes.data.allow_invites);
         }
-        setPendingInvites(invitesRes.data || []);
       } catch (err) {
         setFeedback({ type: 'error', message: 'Failed to load invitation data.' });
       } finally {
@@ -46,16 +59,6 @@ const GroupInvitationPreferences = () => {
       setFeedback({ type: 'error', message: errorMsg });
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleInviteAction = async (id, action) => {
-    try {
-      await api.post(`groups/invites/${id}/${action}/`);
-      setPendingInvites(prev => prev.filter(invite => invite.id !== id));
-      setFeedback({ type: 'success', message: `Invitation ${action}ed.` });
-    } catch (err) {
-      setFeedback({ type: 'error', message: `Failed to ${action} invitation.` });
     }
   };
 
@@ -109,32 +112,6 @@ const GroupInvitationPreferences = () => {
                     <span className="text-sm font-medium text-slate-200">{option.label}</span>
                   </label>
                 ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <h3 className="text-sm font-bold uppercase text-slate-400 tracking-wider mb-6">Pending Group Invitations</h3>
-              <div className="space-y-3">
-                {pendingInvites.length > 0 ? (
-                  pendingInvites.map(invite => (
-                    <div key={invite.id} className="flex items-center justify-between p-4 border border-slate-800 rounded-xl bg-slate-950/50">
-                      <div>
-                        <strong className="text-sm text-slate-200 block">{invite.groupName || invite.group_name}</strong>
-                        <span className="text-xs text-slate-500">Invited by @{invite.inviter || invite.inviter_username}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button type="button" onClick={() => handleInviteAction(invite.id, 'accept')} className="px-3 py-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/30 rounded-lg text-xs font-semibold transition cursor-pointer">
-                          Accept
-                        </button>
-                        <button type="button" onClick={() => handleInviteAction(invite.id, 'decline')} className="px-3 py-1.5 bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-500/30 rounded-lg text-xs font-semibold transition cursor-pointer">
-                          Decline
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-slate-500 text-center py-4">You have no pending group invitations.</p>
-                )}
               </div>
             </div>
 
