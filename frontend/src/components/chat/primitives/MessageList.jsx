@@ -29,9 +29,14 @@ export default function MessageList({
   const bottom = useRef(null);
   const nodes = useRef(new Map()); // message id -> its rendered row
   const jumped = useRef(null); // the id we have already jumped to
+  const newest = useRef(null); // the last message id we have seen
   const [faded, setFaded] = useState(false);
 
   useEffect(() => {
+    const last = messages.length ? messages[messages.length - 1].id : null;
+    const grew = last !== newest.current;
+    newest.current = last;
+
     const target = highlightMessageId ? nodes.current.get(highlightMessageId) : null;
 
     // Jump once per id, not once per render: `useConversation` polls and hands
@@ -45,10 +50,12 @@ export default function MessageList({
       return () => clearTimeout(timer);
     }
 
-    // Only own the scroll position when we are not honouring a deep link.
-    // A hit older than what `fetchAllPages` loaded has no row to scroll to, so
-    // this is also the fallback: the bottom, exactly as before #129.
-    if (!highlightMessageId || jumped.current === highlightMessageId) {
+    // Follow the conversation only when it actually gained a message. Keying
+    // this on the array's identity instead would scroll on every poll, which
+    // yanks a deep-linked reader back to the newest row a few seconds after
+    // they arrived. It is also the fallback for a hit `fetchAllPages` did not
+    // load — there is no row to jump to, so the bottom is the right answer.
+    if (grew) {
       bottom.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, highlightMessageId]);
