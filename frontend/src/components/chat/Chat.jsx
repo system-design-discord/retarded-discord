@@ -31,6 +31,10 @@ export default function Chat({
   emptyTitle = 'No messages yet',
   emptyHint = 'Send the first one.',
   canDelete,
+  // Threaded straight through to `MessageList`, which owns the scroll (#129).
+  // `Chat` deliberately learns nothing about where the id came from — the
+  // three shells read their own URL and all three arrive here the same way.
+  highlightMessageId,
 }) {
   const { user } = useContext(AuthContext);
   const { messages, loading, error, live, send, edit, remove } = useConversation(kind, id);
@@ -121,6 +125,7 @@ export default function Chat({
           messages={messages}
           loading={loading}
           currentUserId={user?.id}
+          highlightMessageId={highlightMessageId}
           canEdit={isAuthor}
           canDelete={canDelete ?? isAuthor}
           onEdit={edit}

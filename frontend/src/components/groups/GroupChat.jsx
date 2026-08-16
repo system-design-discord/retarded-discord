@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import useGroup from '../../hooks/useGroup';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
@@ -20,6 +20,11 @@ import { Avatar } from '../chat/primitives';
 
 export default function GroupChat() {
   const { groupId } = useParams();
+  // `/chat/:groupId` has no query string of its own, but a search hit adds one
+  // to name the message it matched (#129) — the same parameter the other two
+  // shells read, so `Chat` receives it identically from all three.
+  const [searchParams] = useSearchParams();
+  const highlight = Number(searchParams.get('message')) || null;
   const { user } = useContext(AuthContext);
 
   const { group, members, admin, isAdmin, loading, error } = useGroup(groupId);
@@ -44,6 +49,7 @@ export default function GroupChat() {
         <Chat
           kind="group"
           id={groupId}
+          highlightMessageId={highlight}
           title={group?.name ?? 'Group'}
           subtitle={group ? `${members.length} member${members.length === 1 ? '' : 's'}` : null}
           placeholder={group ? `Message ${group.name}…` : 'Message the group…'}

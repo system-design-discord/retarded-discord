@@ -54,6 +54,10 @@ export default function ChannelView() {
   }, [channelId]);
 
   const requested = Number(searchParams.get('topic')) || null;
+  // The message a search hit named (#129). The landing effect below rewrites
+  // the params only when the requested topic is gone, and losing the highlight
+  // in that case is right — the message is not in the topic being shown.
+  const highlight = Number(searchParams.get('message')) || null;
   const active = topics.find((topic) => topic.id === requested) ?? topics[0] ?? null;
 
   // Land on the first topic when none is named, or when the one named is gone.
@@ -205,6 +209,7 @@ export default function ChannelView() {
             key={active.id}
             kind="topic"
             id={active.id}
+            highlightMessageId={highlight}
             title={`#${active.name}`}
             subtitle={channel ? `in # ${channel.name}` : null}
             placeholder={`Message #${active.name}…`}

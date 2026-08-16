@@ -44,6 +44,11 @@ export default function DirectMessages() {
   // `?user=<id>` is what SearchMessages links a direct-message hit to, so the
   // deep link and the sidebar selection are the same piece of state.
   const activeId = Number(searchParams.get('user')) || null;
+  // A search hit deep-links to one message (#129). The landing effect below
+  // only fires when `activeId` is falsy and a deep link always carries `user`,
+  // so it cannot drop this; `open()` drops it on purpose, because clicking
+  // another conversation should not keep a stale highlight.
+  const highlight = Number(searchParams.get('message')) || null;
 
   const loadConversations = useCallback(async () => {
     if (!user?.id) return;
@@ -201,6 +206,7 @@ export default function DirectMessages() {
           key={active.id}
           kind="dm"
           id={active.id}
+          highlightMessageId={highlight}
           title={active.username}
           subtitle="Direct message"
           headerExtra={
