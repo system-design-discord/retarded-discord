@@ -1,12 +1,60 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from common import messages
 
 from .models import Profile
 
 User = get_user_model()
+
+
+class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Log in with an email address or a username — #128.
+
+    Registration has always **required** an email (`RegisterSerializer.Meta`),
+    and the login wireframe labels its field *Email or Username* with the
+    placeholder `example@email.com`. The endpoint mounted underneath was
+    simplejwt's stock view, whose credential is `User.USERNAME_FIELD` and
+    nothing else — so the product made every user type an address it then
+    refused to accept, and answered the attempt with the same message a wrong
+    password gets. Quiet, plausible, and indistinguishable from forgetting your
+    password.
+
+    The fix is a lookup, not a new authentication backend. Django's
+    `authenticate()` is left to do the password check exactly as before; all
+    this does is resolve whatever was typed to the username it belongs to first.
+    That keeps every password validator, every throttle and `is_active` handling
+    on the stock path.
+
+    **The lookup is only unambiguous because emails are unique**, which they are
+    since this card added `RegisterSerializer.validate_email` and the matching
+    check on `ProfileSerializer`. Older rows predating that could still collide,
+    so the query is ordered and takes the first match rather than raising
+    `MultipleObjectsReturned` — a 500 on a login form is worse than resolving a
+    historical duplicate to its oldest account.
+
+    An identifier containing no `@` is not looked up at all: it cannot be an
+    email, and skipping the query keeps the ordinary username login at exactly
+    the cost it had before.
+    """
+
+    def validate(self, attrs):
+        identifier = attrs.get(self.username_field, '')
+
+        if '@' in identifier:
+            match = (
+                User.objects
+                .filter(email__iexact=identifier)
+                .order_by('pk')
+                .values_list('username', flat=True)
+                .first()
+            )
+            if match:
+                attrs[self.username_field] = match
+
+        return super().validate(attrs)
 
 
 class UserSerializer(serializers.ModelSerializer):
