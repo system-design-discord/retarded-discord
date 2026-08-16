@@ -118,8 +118,6 @@ class Message(models.Model):
     scheduled_at = models.DateTimeField(null=True, blank=True, db_index=True)
     is_delivered = models.BooleanField(default=True)
 
-    is_read = models.BooleanField(default=False)
-
     # US-3.1: an edited message is visibly labelled, and its original timestamp
     # survives. `created_at` is auto_now_add, so the second half holds by
     # construction — there is no code path that can move it.

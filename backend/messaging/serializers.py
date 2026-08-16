@@ -21,7 +21,7 @@ class MessageSerializer(serializers.ModelSerializer):
         model = Message
         fields = [
             'id', 'sender', 'recipient', 'group', 'topic',
-            'text', 'media', 'media_id', 'created_at', 'is_read',
+            'text', 'media', 'media_id', 'created_at',
             'is_edited', 'edited_at', 'scheduled_at', 'is_delivered',
         ]
         # `scheduled_at` is read-only *here* and writable only through
@@ -29,7 +29,7 @@ class MessageSerializer(serializers.ModelSerializer):
         # /api/messages/ sends now, and scheduling is a different endpoint
         # rather than a flag on this one.
         read_only_fields = [
-            'id', 'sender', 'created_at', 'is_read', 'is_edited', 'edited_at',
+            'id', 'sender', 'created_at', 'is_edited', 'edited_at',
             'scheduled_at', 'is_delivered',
         ]
 
@@ -69,7 +69,7 @@ class MessageEditSerializer(serializers.ModelSerializer):
         model = Message
         fields = [
             'id', 'sender', 'recipient', 'group', 'topic',
-            'text', 'media', 'created_at', 'is_read', 'is_edited', 'edited_at',
+            'text', 'media', 'created_at', 'is_edited', 'edited_at',
             'scheduled_at', 'is_delivered',
         ]
         read_only_fields = [
