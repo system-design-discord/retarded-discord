@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  addMember as addMemberRequest,
   assignRole,
   createRole,
   deleteRole,
   listMembers,
   listRoles,
   readRoleError,
+  removeMember as removeMemberRequest,
   updateRole,
   withRoleIds,
 } from '../services/roles';
@@ -20,10 +22,21 @@ import {
 // server decides, so optimism here would be a lie in the one screen whose
 // subject is permission.
 //
-// Members and roles load together because they are joined: the member list
-// renders `role` as a *name* and assignment takes an *id*. `withRoleIds` does
-// that join, and re-doing it after every write is what makes "assigning a role
-// updates the member list without a page reload" true.
+// Members and roles are joined — the member list renders `role` as a *name* and
+// assignment takes an *id*, and `withRoleIds` does that join. Re-doing it after
+// every write is what makes "assigning a role updates the member list without a
+// page reload" true.
+//
+// **They are not, however, read under the same permission, and #142 is where
+// that stopped being an academic distinction.** Listing members needs membership;
+// listing roles needs `can_change_role`. They used to load in one `Promise.all`
+// behind a single `enabled` flag, which was harmless while the only consumer was
+// the role manager's role editor — but `can_add_member` and `can_remove_member`
+// are separate permissions, and a member holding one of those and not
+// `can_change_role` got an empty screen: the roles call 403'd and took the
+// member list down with it. So the two reads are independent now. `enabled`
+// gates the roles half alone, and the members half loads for anybody who can see
+// the channel.
 
 export default function useChannelRoles(channelId, { enabled = true } = {}) {
   const [roles, setRoles] = useState([]);
@@ -32,25 +45,23 @@ export default function useChannelRoles(channelId, { enabled = true } = {}) {
   const [error, setError] = useState('');
 
   const refresh = useCallback(async () => {
-    if (!channelId || !enabled) {
+    if (!channelId) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
     try {
-      // Members need membership only, roles need `can_change_role`. Asking for
-      // both together means one failure reports one error, which is what a
-      // reader of this screen wants — not two half-loaded panels.
-      const [nextRoles, nextMembers] = await Promise.all([
-        listRoles(channelId),
-        listMembers(channelId),
-      ]);
+      // `enabled` is `can_change_role`. Without it there are no roles to read
+      // and no join to do, and the member list is still perfectly readable —
+      // which is the whole point of splitting these.
+      const nextRoles = enabled ? await listRoles(channelId) : [];
+      const nextMembers = await listMembers(channelId);
       setRoles(nextRoles);
       setMembers(withRoleIds(nextMembers, nextRoles));
       setError('');
     } catch (caught) {
-      setError(readRoleError(caught, 'The roles for this channel could not be loaded.'));
+      setError(readRoleError(caught, 'The members of this channel could not be loaded.'));
     } finally {
       setLoading(false);
     }
@@ -100,5 +111,38 @@ export default function useChannelRoles(channelId, { enabled = true } = {}) {
     [channelId, guard],
   );
 
-  return { roles, members, loading, error, setError, refresh, create, update, remove, assign };
+  /** US-4.4 / SH.1 — add a member. The target's `allow_invites` may refuse. */
+  const addMember = useCallback(
+    (userId) =>
+      guard(
+        () => addMemberRequest(channelId, userId),
+        'That user could not be added to the channel.',
+      ),
+    [channelId, guard],
+  );
+
+  /** US-4.3 — remove a member. The channel owner cannot be removed. */
+  const removeMember = useCallback(
+    (userId) =>
+      guard(
+        () => removeMemberRequest(channelId, userId),
+        'That member could not be removed from the channel.',
+      ),
+    [channelId, guard],
+  );
+
+  return {
+    roles,
+    members,
+    loading,
+    error,
+    setError,
+    refresh,
+    create,
+    update,
+    remove,
+    assign,
+    addMember,
+    removeMember,
+  };
 }

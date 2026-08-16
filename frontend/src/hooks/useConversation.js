@@ -5,6 +5,7 @@ import {
   listMessages,
   sendMessage,
 } from '../services/messages';
+import { uploadMedia } from '../services/media';
 import { openConversationSocket } from '../lib/socket';
 
 // One conversation, whichever of the three kinds it is. The DM view, the group
@@ -136,14 +137,39 @@ export default function useConversation(kind, id) {
     return () => socket.close();
   }, [target, receive]);
 
+  // #123 — a message, optionally carrying a file.
+  //
+  // **The upload lives here, not in the composer**, for the same reason
+  // everything else in this hook does: an attachment is two requests that must
+  // either both succeed or leave the screen untouched, and the composer must be
+  // told which happened so it knows whether to clear. Uploading in the
+  // component would put half of a failed send outside the one place that owns
+  // `error`, and would give the composer a second way to move message state.
+  //
+  // The order is fixed by the API: `media/upload/` first, then `media_id` on the
+  // message. A topic upload names its topic so `A-10`'s restriction is evaluated
+  // at the upload rather than only at the attach — see `services/media.js`.
+  //
+  // Answers **false when nothing was sent**, which is what the composer reads to
+  // decide whether to keep the draft and the attachment.
   const send = useCallback(
-    async (text) => {
-      if (!target) return;
+    async (text, file = null) => {
+      if (!target) return false;
       try {
-        receive(await sendMessage(target, { text }));
+        let mediaId = null;
+        if (file) {
+          const uploaded = await uploadMedia(file, {
+            topic: target.kind === 'topic' ? target.id : null,
+          });
+          mediaId = uploaded.id;
+        }
+
+        receive(await sendMessage(target, { text, mediaId }));
         setError('');
+        return true;
       } catch (caught) {
         setError(readError(caught, 'The message could not be sent.'));
+        return false;
       }
     },
     [target, receive],

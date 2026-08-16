@@ -11,6 +11,7 @@ import DirectMessages from './components/dms/DirectMessages';
 import ChannelsDashboard from './components/channels/ChannelsDashboard';
 import ChannelView from './components/channels/ChannelView';
 import RoleManager from './components/channels/RoleManager';
+import ChannelSettings from './components/channels/ChannelSettings';
 import GroupsDashboard from './components/groups/GroupsDashboard';
 import GroupSettings from './components/groups/GroupSettings';
 import Dashboard from './components/dashboard/Dashboard';
@@ -58,6 +59,10 @@ function App() {
             picker that stood in for that link while F-04 was unbuilt is gone. */}
         <Route path="/channels/:channelId" element={<PrivateRoute><ChannelView /></PrivateRoute>} />
         <Route path="/channels/:channelId/roles" element={<PrivateRoute><RoleManager /></PrivateRoute>} />
+        {/* #125 — the mirror of /groups/:groupId/settings. `can_edit_channel`
+            existed, was enforced and unlocked one boolean; this is the screen
+            it was missing. Deleting a channel stays on the channel list. */}
+        <Route path="/channels/:channelId/settings" element={<PrivateRoute><ChannelSettings /></PrivateRoute>} />
         <Route path="/groups" element={<PrivateRoute><GroupsDashboard /></PrivateRoute>} />
         {/* Both paths open the same view. SearchMessages links group hits at
             /chat/<group_id>, and the groups dashboard opens the nested one. */}

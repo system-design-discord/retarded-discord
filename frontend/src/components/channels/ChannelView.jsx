@@ -2,12 +2,12 @@ import { useContext, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import useChannel from '../../hooks/useChannel';
 import useChannelPermissions from '../../hooks/useChannelPermissions';
-import { CAN_CREATE_TOPIC } from '../../lib/permissions';
+import { CAN_CREATE_TOPIC, CAN_EDIT_CHANNEL, CAN_SEND_MEDIA } from '../../lib/permissions';
 import { listMembers } from '../../services/roles';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
 import Chat from '../chat/Chat';
-import { Avatar, EmptyState } from '../chat/primitives';
+import { Avatar, EmptyState, useConfirm } from '../chat/primitives';
 
 // F-05 — US-2.3 and US-4.5. A channel, its topics, and the conversation in one.
 //
@@ -26,7 +26,8 @@ import { Avatar, EmptyState } from '../chat/primitives';
 export default function ChannelView() {
   const { channelId } = useParams();
   const { user } = useContext(AuthContext);
-  const { channel, topics, loading, error, setError, addTopic } = useChannel(channelId);
+  const { channel, topics, loading, error, setError, addTopic, renameTopic, removeTopic } =
+    useChannel(channelId);
   // US-8.3, and the only read of `me/permissions/` on this screen. The hook is
   // shared with F-06's role manager rather than this file asking a second time.
   const { isOwner, can } = useChannelPermissions(channelId);
@@ -35,6 +36,17 @@ export default function ChannelView() {
   const [members, setMembers] = useState([]);
   const [newTopic, setNewTopic] = useState('');
   const [adding, setAdding] = useState(false);
+
+  // #126 — renaming happens in place on the active tab rather than in a modal,
+  // the shape `RoleManager`'s `RoleCard` already uses for the same job.
+  const [renaming, setRenaming] = useState(false);
+  const [topicName, setTopicName] = useState('');
+  const [topicBusy, setTopicBusy] = useState(false);
+  // What the last delete took with it, kept so the count `C-03` answers with is
+  // actually read to somebody. Cleared on the next topic switch.
+  const [cascade, setCascade] = useState(null);
+
+  const [confirm, confirmDialog] = useConfirm();
 
   // Membership is all this needs — `ChannelMemberListCreateView` gates the read
   // on `IsChannelMember`, unlike the roles list, which needs `can_change_role`.
@@ -67,6 +79,14 @@ export default function ChannelView() {
     }
   }, [active, requested, setSearchParams]);
 
+  // Switching topics closes an open rename and drops the previous topic's
+  // deletion report — both belong to the tab that is no longer active.
+  useEffect(() => {
+    setRenaming(false);
+    setTopicName(active?.name ?? '');
+    setCascade(null);
+  }, [active?.id, active?.name]);
+
   // US-3.3, US-3.5 and US-3.6, mirroring `roles.services.may_delete_message`:
   // the author, the channel owner, or a holder of `can_delete_message`. Read
   // from `me/permissions/` rather than from the member row, which carries a
@@ -83,6 +103,36 @@ export default function ChannelView() {
   // button the server would refuse is a courtesy to the user, nothing more.
   const mayCreateTopic = can(CAN_CREATE_TOPIC);
 
+  // A-10 / US-2.4 / US-7.3, and the same composition `roles.may_send_media`
+  // makes: an unrestricted channel lets every member attach a file, exactly like
+  // posting text, and a restricted one narrows that to holders of
+  // `can_send_media`. The owner holds all eight implicitly, which is why
+  // `isOwner` short-circuits here as it does there.
+  //
+  // Composing it here rather than reading `media_restricted` inside the composer
+  // is the point of #123's second criterion: until now the toggle governed an
+  // action nobody could perform, so nothing observed it. The server refuses the
+  // upload and the attach regardless — this only stops offering a control that
+  // was always going to 403.
+  // #125 — the settings screen's gate, asked here only to decide whether to
+  // offer the link to it.
+  const mayEditChannel = can(CAN_EDIT_CHANNEL);
+
+  // #126 — `TopicDetailView.required_permission` is `can_edit_channel` for both
+  // verbs, so one gate covers rename and delete. Until this landed,
+  // `useChannel.removeTopic` and `services/channels.deleteTopic` were written,
+  // exported and called by nothing: the permission's two topic-facing effects
+  // were unreachable, which is the same lopsidedness #125 fixed for the channel
+  // itself. As everywhere else, hiding the controls is a courtesy — the server
+  // refuses the PATCH and the DELETE regardless.
+  const mayEditTopics = mayEditChannel;
+
+  const restricted = Boolean(channel?.media_restricted);
+  const maySendMedia = !restricted || isOwner || can(CAN_SEND_MEDIA);
+  const mediaRestrictionReason = maySendMedia
+    ? ''
+    : 'Media is restricted in this channel, and your role here does not grant can_send_media. You can still send text.';
+
   const submitTopic = async (event) => {
     event.preventDefault();
     const name = newTopic.trim();
@@ -94,6 +144,50 @@ export default function ChannelView() {
     if (created) {
       setNewTopic('');
       setSearchParams({ topic: String(created.id) });
+    }
+  };
+
+  const submitRename = async (event) => {
+    event.preventDefault();
+    const name = topicName.trim();
+    if (!name || !active) return;
+
+    if (name === active.name) {
+      setRenaming(false);
+      return;
+    }
+
+    setTopicBusy(true);
+    const renamed = await renameTopic(active.id, name);
+    setTopicBusy(false);
+    // A refused rename — a name already taken in this channel, a permission the
+    // caller does not hold — keeps the form open with what they typed, so the
+    // message below is next to the thing it is about.
+    if (renamed) setRenaming(false);
+  };
+
+  const destroyTopic = async () => {
+    if (!active) return;
+
+    const confirmed = await confirm({
+      title: `Delete #${active.name}?`,
+      body: 'Every message in this topic goes with it, for everybody and not only for you. This cannot be undone.',
+      confirmLabel: 'Delete topic',
+    });
+    if (!confirmed) return;
+
+    setTopicBusy(true);
+    const deletedMessages = await removeTopic(active.id);
+    setTopicBusy(false);
+
+    // `C-03` answers 200 with `{deleted_messages: n}` precisely so a caller can
+    // say what went with it. `null` is a refusal, and `0` is a real answer —
+    // hence the explicit test rather than a truthiness check.
+    if (deletedMessages !== null) {
+      setCascade({ name: active.name, messages: deletedMessages });
+      // The landing effect picks the next topic; clearing the parameter is what
+      // lets it, since the deleted id would otherwise stay in the URL.
+      setSearchParams({}, { replace: true });
     }
   };
 
@@ -139,36 +233,113 @@ export default function ChannelView() {
             </p>
           </div>
 
-          {/* F-06's screen. It was reachable only through a picker that existed
-              because this view did not; now it is linked from its subject. */}
-          <Link
-            to={`/channels/${channelId}/roles`}
-            className="shrink-0 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-indigo-300 transition"
-          >
-            🛡️ Roles
-          </Link>
+          <div className="shrink-0 flex items-center gap-2">
+            {/* F-06's screen. It was reachable only through a picker that existed
+                because this view did not; now it is linked from its subject. */}
+            <Link
+              to={`/channels/${channelId}/roles`}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-indigo-300 transition"
+            >
+              🛡️ Roles
+            </Link>
+            {/* #125. Offered to holders of `can_edit_channel` only — the screen
+                itself refuses everybody else and the server refuses them twice,
+                but a settings link that leads to a refusal is worse than none. */}
+            {mayEditChannel && (
+              <Link
+                to={`/channels/${channelId}/settings`}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-indigo-300 transition"
+              >
+                ⚙ Settings
+              </Link>
+            )}
+          </div>
         </header>
 
         <nav className="px-4 py-2 border-b border-slate-800 bg-slate-900/40 flex items-center gap-2 overflow-x-auto">
-          {topics.map((topic) => (
-            <button
-              key={topic.id}
-              type="button"
-              onClick={() => setSearchParams({ topic: String(topic.id) })}
-              className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                active?.id === topic.id
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              #{topic.name}
-            </button>
-          ))}
-          {!loading && topics.length === 0 && (
-            <span className="text-xs text-slate-600">This channel has no topics yet.</span>
+          {renaming && active ? (
+            // The rename replaces the tab strip rather than sitting beside it:
+            // at 390px there is no room for both, and the strip is a scroll
+            // container that would otherwise carry the form off screen.
+            <form onSubmit={submitRename} className="flex items-center gap-2 w-full">
+              <span className="text-xs text-slate-500 shrink-0">Rename</span>
+              <input
+                autoFocus
+                value={topicName}
+                onChange={(event) => setTopicName(event.target.value)}
+                className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
+              />
+              <button
+                type="submit"
+                disabled={topicBusy || !topicName.trim()}
+                className="shrink-0 text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-40 cursor-pointer"
+              >
+                {topicBusy ? '…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTopicName(active.name);
+                  setRenaming(false);
+                }}
+                className="shrink-0 text-xs text-slate-500 hover:text-slate-300 cursor-pointer"
+              >
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <>
+              {topics.map((topic) => (
+                <button
+                  key={topic.id}
+                  type="button"
+                  onClick={() => setSearchParams({ topic: String(topic.id) })}
+                  className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+                    active?.id === topic.id
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  #{topic.name}
+                </button>
+              ))}
+              {!loading && topics.length === 0 && (
+                <span className="text-xs text-slate-600">This channel has no topics yet.</span>
+              )}
+
+              {/* Offered for the *active* topic only. Per-tab menus would put
+                  two controls on every tab in a strip that already scrolls
+                  sideways on a phone, and the active topic is the one whose
+                  messages are on screen to be weighed against deleting it. */}
+              {mayEditTopics && active && (
+                <span className="shrink-0 flex items-center gap-2 pl-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTopicName(active.name);
+                      setRenaming(true);
+                    }}
+                    disabled={topicBusy}
+                    title={`Rename #${active.name}`}
+                    className="text-xs text-slate-400 hover:text-slate-200 disabled:opacity-40 cursor-pointer"
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    onClick={destroyTopic}
+                    disabled={topicBusy}
+                    title={`Delete #${active.name}`}
+                    className="text-xs text-rose-400 hover:text-rose-300 disabled:opacity-40 cursor-pointer"
+                  >
+                    Delete
+                  </button>
+                </span>
+              )}
+            </>
           )}
 
-          {mayCreateTopic && (
+          {mayCreateTopic && !renaming && (
             <form onSubmit={submitTopic} className="shrink-0 flex items-center gap-1.5 ml-auto">
               <input
                 value={newTopic}
@@ -186,6 +357,20 @@ export default function ChannelView() {
             </form>
           )}
         </nav>
+
+        {cascade && (
+          <div className="mx-4 mt-3 rounded-xl bg-slate-800/60 border border-slate-700 px-3 py-2 text-xs text-slate-300">
+            #{cascade.name} was deleted, and {cascade.messages}{' '}
+            {cascade.messages === 1 ? 'message went' : 'messages went'} with it.
+            <button
+              type="button"
+              onClick={() => setCascade(null)}
+              className="ml-3 underline cursor-pointer"
+            >
+              dismiss
+            </button>
+          </div>
+        )}
 
         {error && (
           <div className="mx-4 mt-3 rounded-xl bg-rose-950/40 border border-rose-900/60 px-3 py-2 text-xs text-rose-300 whitespace-pre-line">
@@ -215,6 +400,8 @@ export default function ChannelView() {
             placeholder={`Message #${active.name}…`}
             emptyHint="Be the first to say something in this topic."
             canDelete={canDelete}
+            canSendMedia={maySendMedia}
+            mediaRestrictionReason={mediaRestrictionReason}
             aside={
               <aside className="w-60 shrink-0 border-l border-slate-800 bg-slate-900/60 p-4 overflow-y-auto hidden lg:block">
                 <h3 className="text-xs font-bold uppercase text-slate-500 tracking-wider mb-3">
@@ -261,6 +448,8 @@ export default function ChannelView() {
           </div>
         )}
       </div>
+
+      {confirmDialog}
     </div>
   );
 }

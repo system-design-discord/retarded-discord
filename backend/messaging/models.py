@@ -43,6 +43,22 @@ class MessageQuerySet(models.QuerySet):
     to moderate it.
     """
 
+    def _audience(self, user):
+        """Who is in the conversation a message belongs to.
+
+        Factored out because `visible_to` and `readable_by` differ only in which
+        *delivery* states they admit, never in who the audience is. Two copies of
+        this Q would be two definitions of "who may read what", which is the bug
+        `visible_to` was written to end.
+        """
+        return (
+            Q(sender=user)                                  # anything you wrote
+            | Q(recipient=user)                             # a DM addressed to you
+            | Q(group__members=user)                        # a group you are in
+            | Q(topic__channel__memberships__user=user)     # a channel you joined
+            | Q(topic__channel__owner=user)                 # a channel you own
+        )
+
     def visible_to(self, user):
         """Every message `user` is entitled to read, and nothing else.
 
@@ -58,12 +74,35 @@ class MessageQuerySet(models.QuerySet):
         # the scope that decides what may be read is also what hides it — from
         # its own author included, who reads a pending schedule through
         # `/api/messages/scheduled/` instead.
-        return self.filter(is_delivered=True).filter(
-            Q(sender=user)                                  # anything you wrote
-            | Q(recipient=user)                             # a DM addressed to you
-            | Q(group__members=user)                        # a group you are in
-            | Q(topic__channel__memberships__user=user)     # a channel you joined
-            | Q(topic__channel__owner=user)                 # a channel you own
+        return self.filter(is_delivered=True).filter(self._audience(user)).distinct()
+
+    def readable_by(self, user):
+        """`visible_to`, plus the caller's own *pending* scheduled messages.
+
+        The detail view's scope rather than the list's, and the difference is one
+        row class: a message you wrote that the dispatcher has not released yet.
+        `visible_to` hides it from every conversation view including its author's
+        (SC-02), which is right — it is not in the conversation. But addressing a
+        message by id in order to *edit* it is not reading a conversation, and an
+        author who cannot reach their own pending schedule cannot fix a typo in it
+        before it goes out.
+
+        Expressed as one filter over the shared audience rather than as two
+        querysets unioned with `|`: `visible_to` ends in `.distinct()`, and
+        Django refuses to combine a distinct queryset with a non-distinct one
+        ("Cannot combine a unique query with a non-unique query") — which it does
+        at query-build time, so every caller of the detail view raised a
+        `TypeError` and answered 500.
+
+        Note that the audience clause still applies to the pending row, and it is
+        satisfied by `Q(sender=user)`: only the author is admitted, never the
+        recipient of a schedule that has not been sent.
+        """
+        if user is None or not user.is_authenticated:
+            return self.none()
+
+        return self.filter(Q(is_delivered=True) | Q(sender=user)).filter(
+            self._audience(user)
         ).distinct()
 
     def search(self, term):

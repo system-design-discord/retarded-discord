@@ -80,6 +80,24 @@ export async function createTopic(channelId, name) {
 }
 
 /**
+ * Rename a topic. Needs `can_edit_channel`, for the same reason deleting one
+ * does — being trusted to open a discussion is not being trusted to rename
+ * somebody else's.
+ *
+ * `TopicSerializer.validate_name` rejects a blank name and a name already used
+ * in this channel, the second as a 400 keyed `name` rather than as the 500 the
+ * unique constraint would otherwise produce. `channel` is read-only and comes
+ * from the URL, so a rename cannot move a topic to another channel.
+ *
+ * This is #126's missing half: `deleteTopic` existed and had no caller, and
+ * `PATCH channels/<id>/topics/<id>/` had no client at all.
+ */
+export async function updateTopic(channelId, topicId, body) {
+  const response = await api.patch(`channels/${channelId}/topics/${topicId}/`, body);
+  return response.data;
+}
+
+/**
  * Delete a topic. Needs `can_edit_channel` — being trusted to open a discussion
  * is not the same as being trusted to close somebody else's.
  *

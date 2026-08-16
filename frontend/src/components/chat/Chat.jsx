@@ -35,6 +35,14 @@ export default function Chat({
   // `Chat` deliberately learns nothing about where the id came from — the
   // three shells read their own URL and all three arrive here the same way.
   highlightMessageId,
+  // A-10's per-channel media restriction, threaded the same way (#123). Only
+  // `ChannelView` ever passes it, because only a channel has one: a DM and a
+  // group have no `media_restricted` column and no `can_send_media` to consult,
+  // so the default is what keeps them unaffected rather than a branch here.
+  // This is not the check — `roles.require_send_media` refuses the upload and
+  // the attach whatever the composer draws.
+  canSendMedia = true,
+  mediaRestrictionReason = '',
 }) {
   const { user } = useContext(AuthContext);
   const { messages, loading, error, live, send, edit, remove } = useConversation(kind, id);
@@ -139,6 +147,8 @@ export default function Chat({
           onSchedule={id ? requestSchedule : undefined}
           disabled={!id}
           placeholder={placeholder}
+          canSendMedia={canSendMedia}
+          mediaRestrictionReason={mediaRestrictionReason}
         />
       </main>
 

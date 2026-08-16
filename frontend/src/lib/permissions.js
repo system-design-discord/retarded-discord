@@ -66,6 +66,17 @@ export const CAN_CREATE_TOPIC = 'can_create_topic';
 // on, named here for the same reason as above.
 export const CAN_EDIT_CHANNEL = 'can_edit_channel';
 
+// #123 — the key `ChannelView` composes with `Channel.media_restricted` to
+// decide whether to offer the attach control, mirroring
+// `roles.services.may_send_media`.
+export const CAN_SEND_MEDIA = 'can_send_media';
+
+// #142 — the two keys the role manager's Members panel gates its add and remove
+// controls on. They are separate permissions and they gate separate controls:
+// holding one is not holding the other, and neither is `can_change_role`.
+export const CAN_ADD_MEMBER = 'can_add_member';
+export const CAN_REMOVE_MEMBER = 'can_remove_member';
+
 /** Just the keys, in model order. */
 export const PERMISSION_KEYS = PERMISSIONS.map((permission) => permission.key);
 
