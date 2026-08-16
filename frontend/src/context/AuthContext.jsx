@@ -28,8 +28,11 @@ export const AuthProvider = ({ children }) => {
         }
     }, []);
 
-    const login = async (username, password) => {
-        const response = await api.post('auth/login/', { username, password });
+    // `identifier` is an email address or a username — the endpoint resolves
+    // either (#128). The body key stays `username` because that is
+    // `USERNAME_FIELD`, and therefore the key simplejwt's serializer reads.
+    const login = async (identifier, password) => {
+        const response = await api.post('auth/login/', { username: identifier, password });
         storeTokens(response.data);
         await fetchProfile();
         return response.data;

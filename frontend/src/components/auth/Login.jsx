@@ -3,8 +3,15 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import PasswordField from './PasswordField';
 
+// #128 — the field takes an **email address or a username**, which is what the
+// login wireframe labels it and what `auth/login/` accepts since that card.
+// Registration has always required an email, so the screen used to make a user
+// type an address and then refuse it as a credential, with the same message a
+// wrong password gets. The state is named `identifier` rather than `username`
+// because it is no longer either one in particular; the request body still says
+// `username`, which is the key simplejwt reads.
 export default function Login() {
-  const [username, setUsername] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const { login } = useContext(AuthContext);
@@ -18,11 +25,14 @@ export default function Login() {
     e.preventDefault();
     setError('');
     try {
-      await login(username, password);
+      await login(identifier, password);
       // Navigate to the target route and replace the login page in browser history
       navigate(from, { replace: true });
     } catch (err) {
-      setError('Invalid username or password.');
+      // Deliberately does not say which of the three was wrong: naming the
+      // field would turn the form into an account-existence oracle. Matches
+      // `common.messages.INVALID_CREDENTIALS` on the server.
+      setError('Invalid email, username, or password.');
     }
   };
 
@@ -40,14 +50,19 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Username</label>
+            <label htmlFor="identifier" className="block text-slate-400 text-xs font-bold uppercase mb-2">
+              Email or Username
+            </label>
             <input
+              id="identifier"
+              name="identifier"
               type="text"
+              autoComplete="username"
               required
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition duration-200 text-sm"
-              placeholder="Enter your username"
+              placeholder="example@email.com"
             />
           </div>
 
