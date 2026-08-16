@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect } from 'react';
 import api from '../services/api';
+import { clearTokens, getAccessToken, getRefreshToken, storeTokens } from '../lib/tokens';
 
 export const AuthContext = createContext();
 
@@ -19,7 +20,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     useEffect(() => {
-        const token = localStorage.getItem('access_token');
+        const token = getAccessToken();
         if (token) {
             fetchProfile();
         } else {
@@ -29,8 +30,7 @@ export const AuthProvider = ({ children }) => {
 
     const login = async (username, password) => {
         const response = await api.post('auth/login/', { username, password });
-        localStorage.setItem('access_token', response.data.access);
-        localStorage.setItem('refresh_token', response.data.refresh);
+        storeTokens(response.data);
         await fetchProfile();
         return response.data;
     };
@@ -41,7 +41,7 @@ export const AuthProvider = ({ children }) => {
     // because a user who pressed Log Out must end up logged out even if the
     // request fails.
     const logout = async () => {
-        const refresh = localStorage.getItem('refresh_token');
+        const refresh = getRefreshToken();
         try {
             if (refresh) {
                 await api.post('auth/logout/', { refresh });
@@ -49,8 +49,7 @@ export const AuthProvider = ({ children }) => {
         } catch {
             // Already expired or already blacklisted — nothing the user can act on.
         } finally {
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
+            clearTokens();
             setUser(null);
         }
     };
