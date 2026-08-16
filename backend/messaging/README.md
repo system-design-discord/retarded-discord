@@ -92,14 +92,6 @@ and neither of those has one. The check is here as well as in `media_app`
 because an upload need not declare its topic, so the upload-time gate alone
 would be a bypass; `backend/media_app/README.md` explains the pair.
 
-## Not here yet
-
-`M-06` owns editing and the `is_edited` flag, `M-08` the full-text search over
-this module's rows, and `SC-02` the `scheduled_at` field — all landed. `ERD.tex`
-also gives `Message` an `updated_at` and an `is_delivered`; `is_delivered` is
-what `SC-03`'s dispatcher flips when a scheduled message's time comes, and it is
-also what `visible_to` filters on, which is why a pending one is invisible to
-every conversation view including its author's.
 
 ## Search — `GET /api/messages/search/?q=`
 
