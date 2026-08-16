@@ -72,6 +72,10 @@ REFRESH_TOKEN_REQUIRED = "A refresh token is required."
 INVALID_VALUE = "Invalid value."
 BIO_TOO_LONG = "A bio cannot be longer than {limit} characters."
 USERNAME_TAKEN = "This username is already taken."
+EMAIL_TAKEN = "An account with this email address already exists."
+# Login refuses without saying which of the three was wrong — naming the field
+# would turn the endpoint into an account-existence oracle.
+INVALID_CREDENTIALS = "Invalid email, username, or password."
 
 # --- Media ------------------------------------------------------------------
 

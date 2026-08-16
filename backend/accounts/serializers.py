@@ -76,6 +76,25 @@ class ProfileSerializer(serializers.ModelSerializer):
         model = Profile
         fields = ['user', 'username', 'email', 'bio', 'avatar', 'allow_invites']
 
+    def validate_email(self, value):
+        """The account screen writes `user.email`, so it can collide too — #128.
+
+        Registration is not the only door onto that column. Once an email is a
+        login credential, a second account claiming an address already in use
+        makes *both* accounts unreachable by it, and this endpoint could do that
+        as easily as `RegisterSerializer` could.
+
+        Excludes the caller's own row for the same reason `validate_username`
+        does: the account screen submits every field on every save, so the
+        address you already hold must not be read as a clash with yourself.
+        """
+        taken = User.objects.filter(email__iexact=value)
+        if self.instance is not None:
+            taken = taken.exclude(pk=self.instance.user_id)
+        if taken.exists():
+            raise serializers.ValidationError(messages.EMAIL_TAKEN)
+        return value
+
     def validate_username(self, value):
         """`update()` assigns straight onto `user.username`, so a duplicate is
         an IntegrityError — a 500 rather than something a screen can show. It
@@ -125,6 +144,25 @@ class RegisterSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'email': {'required': True}
         }
+
+    def validate_email(self, value):
+        """No two accounts may share an email address — #128.
+
+        Django's stock `User.email` carries **no** unique constraint, so the
+        registration endpoint happily made a second account on an address that
+        already had one. That was survivable while the email was decoration;
+        `EmailOrUsernameTokenObtainSerializer` makes it a credential, and a
+        credential that resolves to two accounts resolves to neither.
+
+        Matched case-insensitively, because that is how people retype an address
+        and how the login lookup below has to search for one. Enforced here
+        rather than by a migration on purpose: `AUTH_USER_MODEL` is
+        `django.contrib.auth.User`, so a `unique=True` on that field would be a
+        change to a third-party model rather than to ours.
+        """
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError(messages.EMAIL_TAKEN)
+        return value
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
