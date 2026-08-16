@@ -1,16 +1,19 @@
 import axios from 'axios';
 
-// Same-origin by default: nginx proxies /api to the backend in the container
-// stack, and the Vite dev server proxies it in development.
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/';
+import { API_BASE_URL } from '../lib/apiBase';
+import { clearTokens, getAccessToken, getRefreshToken, refreshTokens } from '../lib/tokens';
+
+// Re-exported so `API_BASE_URL` keeps its long-standing import path. It is
+// declared in `lib/apiBase` now — see the note there for why.
+export { API_BASE_URL };
 
 const api = axios.create({
     baseURL: API_BASE_URL,
 });
 
-// اضافه کردن توکن به هدر همه درخواست‌ها
+// Attach the bearer token to every request.
 api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('access_token');
+    const token = getAccessToken();
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -19,36 +22,40 @@ api.interceptors.request.use((config) => {
     return Promise.reject(error);
 });
 
-// مدیریت انقضای توکن (Refresh Token Interceptor)
+// Refresh once on a 401, then replay the original request.
+//
+// The refresh reply carries a **new refresh token as well as a new access
+// token** — `ROTATE_REFRESH_TOKENS` is on — and this used to keep only the
+// access half, so the refresh token the server had just blacklisted stayed in
+// storage. The next 401 presented it, was refused, and dropped the reader on
+// the login screen mid-session (#141). `refreshTokens` writes both halves, and
+// shares one exchange across every request that 401s at the same moment:
+// presenting a rotated token twice is exactly what blacklisting refuses.
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
-        
-        // اگر ارور 401 داد و قبلاً تلاش مجدد نشده بود
+
         if (error.response && error.response.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
-            const refreshToken = localStorage.getItem('refresh_token');
-            
-            if (refreshToken) {
-                try {
-                    const res = await axios.post(`${API_BASE_URL}auth/refresh/`, {
-                        refresh: refreshToken
-                    });
-                    
-                    const newAccessToken = res.data.access;
-                    localStorage.setItem('access_token', newAccessToken);
-                    
-                    // به‌روزرسانی توکن در درخواست اصلی و تلاش مجدد
+
+            // Nothing to refresh with — a plain unauthenticated call. Leave the
+            // 401 to the caller rather than redirecting somebody who was never
+            // logged in.
+            if (!getRefreshToken()) return Promise.reject(error);
+
+            try {
+                const newAccessToken = await refreshTokens();
+                if (newAccessToken) {
                     originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
                     return api(originalRequest);
-                } catch (refreshError) {
-                    // اگر رفرش توکن هم منقضی شده بود، خروج کاربر
-                    localStorage.removeItem('access_token');
-                    localStorage.removeItem('refresh_token');
-                    window.location.href = '/login';
                 }
+            } catch {
+                // The refresh token is spent too. Fall through to the logout.
             }
+
+            clearTokens();
+            window.location.href = '/login';
         }
         return Promise.reject(error);
     }

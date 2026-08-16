@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import api from '../../services/api';
-import { getMyProfile, normalizeProfile } from '../../services/profile';
+import { getMyProfile, getPublicProfile } from '../../services/profile';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
 
@@ -10,15 +9,22 @@ import NavSidebar from '../layout/NavSidebar';
 // "has not set a bio yet" fallback to everybody including users who had set
 // one. It reads `/api/profile/` through `services/profile` now.
 //
-// The *other* user's branch below is deliberately untouched: its endpoint is
-// wrong and no route reaches it, which is #101 and somebody else's card. Both
-// branches already answer `normalizeProfile`'s shape, so fixing it there is a
-// one-line change rather than a rewrite of this file.
+// #101 — the other user's branch called `users/profile/<username>/`, a 404 on
+// both counts: the endpoint is `profile/<user_id>/` and it is keyed by **id**.
+// So this screen is addressed by id too, and `useParams` reads `userId` rather
+// than `username`. #130's groundwork is what kept that to a swapped call:
+// both branches already hand their reply to `normalizeProfile`, so the two
+// serialised shapes render through the same markup.
+//
+// The route that reaches this branch is `/profile/:userId`, registered by the
+// same card — without it `useParams()` was always empty and every visit took
+// the own-profile path, which is why the wrong endpoint had never been seen to
+// fail.
 
 const ViewProfile = () => {
   const navigate = useNavigate();
-  // Grab the username from the URL (if one exists)
-  const { username: targetUsername } = useParams();
+  // Grab the user id from the URL (if one exists)
+  const { userId } = useParams();
   // Get the currently logged-in user from context
   const { user: currentUser } = useContext(AuthContext);
 
@@ -26,8 +32,12 @@ const ViewProfile = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isNotFound, setIsNotFound] = useState(false);
 
-  // Determine if the profile being viewed belongs to the logged-in user
-  const isOwnProfile = !targetUsername || (currentUser && targetUsername === currentUser.username);
+  // Determine if the profile being viewed belongs to the logged-in user.
+  // Compared as numbers: a route parameter is always a string and `user.id` is
+  // not, so `===` on the raw pair would send you to the public endpoint for
+  // your own profile — reachable, but missing your email and the edit button.
+  const targetId = Number(userId) || null;
+  const isOwnProfile = !targetId || targetId === currentUser?.id;
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -35,12 +45,11 @@ const ViewProfile = () => {
       setIsNotFound(false);
       try {
         if (isOwnProfile) {
-          // If no specific username is in the URL, fetch my own profile
+          // If no specific user is named in the URL, fetch my own profile
           setProfileUser(await getMyProfile());
         } else {
-          // If a username is in the URL, fetch that specific user's public profile
-          const response = await api.get(`users/profile/${targetUsername}/`);
-          setProfileUser(normalizeProfile(response.data));
+          // Somebody else's, by id — display fields only
+          setProfileUser(await getPublicProfile(targetId));
         }
       } catch (err) {
         if (err.response?.status === 404) {
@@ -56,7 +65,7 @@ const ViewProfile = () => {
     };
 
     fetchProfile();
-  }, [targetUsername, isOwnProfile]);
+  }, [targetId, isOwnProfile]);
 
   if (isLoading) {
     return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loading profile...</div>;
@@ -114,8 +123,8 @@ const ViewProfile = () => {
               direct message from a profile, so the user directory on the DM
               screen was the only entry to a conversation with anybody.
               `?user=<id>` is the route SearchMessages and the directory already
-              open. This branch is unreachable until #101 gives another user's
-              profile a route and the right endpoint. */}
+              open. #101 gave this branch its route and its endpoint, so the
+              button works. */}
           {!isOwnProfile && profileUser.id && (
             <button
               type="button"

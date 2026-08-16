@@ -17,7 +17,6 @@ import Dashboard from './components/dashboard/Dashboard';
 import SearchMessages from './components/search/SearchMessages';
 import NotificationsCenter from './components/notifications/NotificationsCenter';
 import MyAccount from './components/settings/MyAccount';
-import PrivacySettings from './components/settings/PrivacySettings';
 import GroupInvitationPreferences from './components/settings/GroupInvitationPreferences';
 
 // A simple 404 component matching the dark mode aesthetic
@@ -74,8 +73,22 @@ function App() {
         
         <Route path="/profile" element={<PrivateRoute><ViewProfile /></PrivateRoute>} />
         <Route path="/profile/edit" element={<PrivateRoute><EditProfile /></PrivateRoute>} />
+        {/* #101 — another user's profile. Keyed by **id**, because
+            `/api/profile/<user_id>/` is, and declared after `/profile/edit` so
+            the literal segment keeps winning the match. Without this route
+            `ViewProfile`'s public branch was dead code: `useParams()` was
+            always empty and every visit rendered the caller's own profile. */}
+        <Route path="/profile/:userId" element={<PrivateRoute><ViewProfile /></PrivateRoute>} />
         <Route path="/settings/account" element={<PrivateRoute><MyAccount /></PrivateRoute>} />
-        <Route path="/settings/privacy" element={<PrivateRoute><PrivacySettings /></PrivateRoute>} />
+        {/* #99 — `PrivacySettings` is gone, not repaired. It called
+            `auth/privacy/` (a 404 both ways) with three invented camelCase
+            fields, and the product has exactly one privacy control:
+            `Profile.allow_invites`, which the wireframe itself promoted out of
+            Privacy into its own page. Repairing the screen would have meant
+            either inventing columns or drawing a second copy of the invitation
+            control. The path stays as a redirect so a bookmark still lands
+            somewhere real. */}
+        <Route path="/settings/privacy" element={<Navigate to="/settings/invitations" replace />} />
         <Route path="/settings/invitations" element={<PrivateRoute><GroupInvitationPreferences /></PrivateRoute>} />
 
         {/* Anything unrecognised lands on the 404 page */}

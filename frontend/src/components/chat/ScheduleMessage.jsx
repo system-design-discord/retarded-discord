@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import useScheduledMessages, { pendingFor } from '../../hooks/useScheduledMessages';
 import { localInputValue } from '../../services/scheduling';
-import { Timestamp } from './primitives';
+import { Timestamp, useConfirm } from './primitives';
 
 // U-12 — US-B2.1. Write a message now, have it sent later, see what is pending
 // and cancel one.
@@ -40,6 +40,7 @@ export default function ScheduleMessage({ target, title, draft = '', onScheduled
   const [when, setWhen] = useState(defaultWhen);
   const [submitting, setSubmitting] = useState(false);
   const [showElsewhere, setShowElsewhere] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
 
   const here = pendingFor(scheduled, target);
   const elsewhere = scheduled.filter((message) => !here.includes(message));
@@ -64,7 +65,16 @@ export default function ScheduleMessage({ target, title, draft = '', onScheduled
   };
 
   const drop = async (message) => {
-    if (!window.confirm('Cancel this scheduled message? It cannot be restored.')) return;
+    // #139 — a modal over a modal, which is why the shared dialog carries its
+    // own `z-50` and is rendered after this one: at equal z-index the later
+    // element wins, so it lands on top of the scheduler rather than under it.
+    const confirmed = await confirm({
+      title: 'Cancel this scheduled message?',
+      body: 'It will not be sent, and it cannot be restored.',
+      confirmLabel: 'Cancel it',
+      cancelLabel: 'Keep it',
+    });
+    if (!confirmed) return;
     await cancel(message.id);
   };
 
@@ -93,126 +103,129 @@ export default function ScheduleMessage({ target, title, draft = '', onScheduled
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="min-w-0">
-            <h2 className="text-xl font-bold text-white">Schedule a message</h2>
-            {title && <p className="text-xs text-slate-500 truncate mt-0.5">to {title}</p>}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-500 hover:text-slate-300 transition cursor-pointer shrink-0"
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </div>
-
-        <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase text-slate-400" htmlFor="schedule-text">
-              Message
-            </label>
-            <textarea
-              id="schedule-text"
-              rows={3}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              placeholder="What should it say?"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition resize-none"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase text-slate-400" htmlFor="schedule-when">
-              Send at
-            </label>
-            <input
-              id="schedule-when"
-              type="datetime-local"
-              value={when}
-              min={localInputValue(new Date())}
-              onChange={(event) => setWhen(event.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition"
-            />
-            <p className="text-[11px] text-slate-600">
-              Your local time. The server refuses anything not strictly in the future, and
-              delivery happens on the next dispatch tick — around your chosen time, within a
-              minute of it.
-            </p>
-          </div>
-
-          {error && (
-            <div className="rounded-xl border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200 whitespace-pre-line">
-              {error}
-              <button
-                type="button"
-                onClick={() => setError('')}
-                className="ml-3 text-xs underline cursor-pointer"
-              >
-                dismiss
-              </button>
+    <>
+      <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="min-w-0">
+              <h2 className="text-xl font-bold text-white">Schedule a message</h2>
+              {title && <p className="text-xs text-slate-500 truncate mt-0.5">to {title}</p>}
             </div>
-          )}
-
-          <div className="flex justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-sm font-medium transition cursor-pointer"
+              className="text-slate-500 hover:text-slate-300 transition cursor-pointer shrink-0"
+              aria-label="Close"
             >
-              Close
-            </button>
-            <button
-              type="submit"
-              disabled={submitting || !text.trim() || !when}
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition shadow-lg shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
-            >
-              {submitting ? 'Scheduling…' : 'Schedule'}
+              ✕
             </button>
           </div>
-        </form>
 
-        <div className="mt-6 space-y-3">
-          <h3 className="text-xs font-bold uppercase text-slate-400 tracking-wider">
-            Pending in this conversation
-          </h3>
+          <form onSubmit={submit} className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-slate-400" htmlFor="schedule-text">
+                Message
+              </label>
+              <textarea
+                id="schedule-text"
+                rows={3}
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder="What should it say?"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition resize-none"
+              />
+            </div>
 
-          {loading ? (
-            <div className="text-xs text-slate-600">Loading…</div>
-          ) : here.length > 0 ? (
-            <ul className="space-y-2">{here.map((message) => row(message))}</ul>
-          ) : (
-            <div className="text-xs text-slate-600">Nothing scheduled here yet.</div>
-          )}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase text-slate-400" htmlFor="schedule-when">
+                Send at
+              </label>
+              <input
+                id="schedule-when"
+                type="datetime-local"
+                value={when}
+                min={localInputValue(new Date())}
+                onChange={(event) => setWhen(event.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition"
+              />
+              <p className="text-[11px] text-slate-600">
+                Your local time. The server refuses anything not strictly in the future, and
+                delivery happens on the next dispatch tick — around your chosen time, within a
+                minute of it.
+              </p>
+            </div>
 
-          {elsewhere.length > 0 && (
-            <div className="pt-2">
+            {error && (
+              <div className="rounded-xl border border-rose-800 bg-rose-950/50 px-4 py-3 text-sm text-rose-200 whitespace-pre-line">
+                {error}
+                <button
+                  type="button"
+                  onClick={() => setError('')}
+                  className="ml-3 text-xs underline cursor-pointer"
+                >
+                  dismiss
+                </button>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setShowElsewhere((open) => !open)}
-                className="text-xs text-slate-500 hover:text-slate-300 transition cursor-pointer"
+                onClick={onClose}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-sm font-medium transition cursor-pointer"
               >
-                {showElsewhere ? '▾' : '▸'} {elsewhere.length} scheduled elsewhere
+                Close
               </button>
-              {showElsewhere && (
-                <ul className="space-y-2 mt-2">
-                  {elsewhere.map((message) => {
-                    const to = message.recipient != null
-                      ? 'dm'
-                      : message.group != null
-                        ? 'group'
-                        : 'topic';
-                    return row(message, KINDS[to]);
-                  })}
-                </ul>
-              )}
+              <button
+                type="submit"
+                disabled={submitting || !text.trim() || !when}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold transition shadow-lg shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
+              >
+                {submitting ? 'Scheduling…' : 'Schedule'}
+              </button>
             </div>
-          )}
+          </form>
+
+          <div className="mt-6 space-y-3">
+            <h3 className="text-xs font-bold uppercase text-slate-400 tracking-wider">
+              Pending in this conversation
+            </h3>
+
+            {loading ? (
+              <div className="text-xs text-slate-600">Loading…</div>
+            ) : here.length > 0 ? (
+              <ul className="space-y-2">{here.map((message) => row(message))}</ul>
+            ) : (
+              <div className="text-xs text-slate-600">Nothing scheduled here yet.</div>
+            )}
+
+            {elsewhere.length > 0 && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowElsewhere((open) => !open)}
+                  className="text-xs text-slate-500 hover:text-slate-300 transition cursor-pointer"
+                >
+                  {showElsewhere ? '▾' : '▸'} {elsewhere.length} scheduled elsewhere
+                </button>
+                {showElsewhere && (
+                  <ul className="space-y-2 mt-2">
+                    {elsewhere.map((message) => {
+                      const to = message.recipient != null
+                        ? 'dm'
+                        : message.group != null
+                          ? 'group'
+                          : 'topic';
+                      return row(message, KINDS[to]);
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+      {confirmDialog}
+    </>
   );
 }

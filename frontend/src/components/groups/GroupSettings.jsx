@@ -4,7 +4,7 @@ import useGroup from '../../hooks/useGroup';
 import { searchUsers } from '../../services/users';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
-import { Avatar } from '../chat/primitives';
+import { Avatar, useConfirm } from '../chat/primitives';
 
 // U-10 — US-5.2 and US-6.4. `M-05` delivered both server-side in Sprint 2 and
 // they have been demonstrable only against curl since; this is the screen.
@@ -62,6 +62,12 @@ export default function GroupSettings() {
   const [searching, setSearching] = useState(false);
   const [busyUserId, setBusyUserId] = useState(null);
 
+  // #139 — the two destructive actions below confirm in the app's own dialog.
+  // Declared with the rest of the state, above the loading and not-found
+  // returns further down: a hook after an early return runs on some renders and
+  // not others.
+  const [confirm, confirmDialog] = useConfirm();
+
   // Seed the form from the server's answer, and re-seed whenever it changes —
   // including after a save, so the fields show what was stored rather than what
   // was typed.
@@ -112,10 +118,14 @@ export default function GroupSettings() {
 
   const kick = async (member) => {
     const isSelf = member.id === user?.id;
-    const message = isSelf
-      ? `Remove yourself from ${group.name}? The API refuses this for the admin — there is no way to leave a group yet.`
-      : `Remove ${member.username} from ${group.name}? They lose access to its messages.`;
-    if (!window.confirm(message)) return;
+    const confirmed = await confirm({
+      title: isSelf ? `Remove yourself from ${group.name}?` : `Remove ${member.username}?`,
+      body: isSelf
+        ? 'The API refuses this for the admin — there is no way to leave a group yet.'
+        : `They lose access to ${group.name} and every message in it.`,
+      confirmLabel: 'Remove',
+    });
+    if (!confirmed) return;
 
     setBusyUserId(member.id);
     await removeMember(member.id);
@@ -123,8 +133,13 @@ export default function GroupSettings() {
   };
 
   const destroy = async () => {
-    const message = `Delete ${group.name}? Its memberships and every message in it go with it. This cannot be undone.`;
-    if (!window.confirm(message)) return;
+    const confirmed = await confirm({
+      title: `Delete ${group.name}?`,
+      body:
+        'Its memberships and every message in it go with it. This cannot be undone.',
+      confirmLabel: 'Delete group',
+    });
+    if (!confirmed) return;
 
     const failure = await remove();
     if (!failure) navigate('/groups');
@@ -388,6 +403,8 @@ export default function GroupSettings() {
           </section>
         </div>
       </main>
+
+      {confirmDialog}
     </div>
   );
 }

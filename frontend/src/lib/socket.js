@@ -1,5 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../services/api';
+import { getAccessToken, refreshTokens } from './tokens';
 
 // The gateway's client, and the only file in the SPA that knows a WebSocket
 // exists. `hooks/useConversation.js` and `hooks/useNotifications.js` call it and
@@ -66,14 +65,16 @@ function backoffFor(attempt) {
 
 /** A fresh access token, or `null` if the refresh token is spent too. */
 async function refreshAccessToken() {
-  const refresh = localStorage.getItem('refresh_token');
-  if (!refresh) return null;
   try {
-    const response = await axios.post(`${API_BASE_URL}auth/refresh/`, { refresh });
-    const access = response.data?.access;
-    if (!access) return null;
-    localStorage.setItem('access_token', access);
-    return access;
+    // `lib/tokens` writes **both** halves of the rotated pair. Storing only the
+    // access token here left the blacklisted refresh token behind, so a socket
+    // that recovered from one `4401` could never recover from the second — and
+    // took the reader's session with it when the next REST call tried the same
+    // dead token (#141). It also shares the exchange with `services/api.js`,
+    // which matters because a backend restart 401s the REST call and closes the
+    // socket at the same instant, and the loser of that race would be presenting
+    // a token the winner had just had blacklisted.
+    return await refreshTokens();
   } catch {
     // Deliberately quiet, and deliberately *not* a logout. `services/api.js`
     // clears storage and redirects when a REST refresh fails; doing that here
@@ -128,7 +129,7 @@ export function openSocket({ path, onFrame, onStatus, refusals = {} }) {
   function connect() {
     if (stopped) return;
 
-    const token = localStorage.getItem('access_token');
+    const token = getAccessToken();
     if (!token) {
       stop('Not signed in.');
       return;

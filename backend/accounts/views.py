@@ -8,11 +8,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from common import messages
 
 from .models import Profile
 from .serializers import (
+    EmailOrUsernameTokenObtainPairSerializer,
     ProfileSerializer,
     PublicProfileSerializer,
     PublicUserSerializer,
@@ -60,6 +62,18 @@ class UserDirectoryView(generics.ListAPIView):
             )
             .order_by('search_rank', 'username_lower', 'pk')
         )
+
+
+class LoginView(TokenObtainPairView):
+    """`POST /api/auth/login/` — an email address or a username, plus a password.
+
+    The stock view with the serializer swapped. It stays a subclass rather than
+    a `TokenObtainPairView.as_view(serializer_class=…)` in `urls.py` so the
+    route reads like every other one in this module and the behaviour is
+    findable from the view layer.
+    """
+
+    serializer_class = EmailOrUsernameTokenObtainPairSerializer
 
 
 class RegisterView(generics.CreateAPIView):

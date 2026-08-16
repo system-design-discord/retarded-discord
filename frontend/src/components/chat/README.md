@@ -21,6 +21,7 @@ somebody writes another one, `F-00` has been undone. Add a prop instead.
 | `primitives/MessageComposer.jsx` | Send and clear, and clear **only** once the server accepted it. Optional `onSchedule` adds the clock button. |
 | `ScheduleMessage.jsx` | `U-12`'s modal — pick a time, list what is pending, cancel one. |
 | `primitives/EmptyState.jsx` | The shared "nothing here yet" block. |
+| `primitives/ConfirmDialog.jsx` | The in-app confirmation for a destructive act, plus `useConfirm()`, which answers a promise of `true`/`false`. **No `window.confirm` anywhere in `src` (#139).** |
 | `../layout/NavSidebar.jsx` | The seven-link navigation, written once. |
 | `../../hooks/useConversation.js` | Load, send, edit and delete one conversation. |
 | `../../services/messages.js` | The only file that knows the message API's field names; exports `targetFor` / `targetOf`. |
@@ -38,6 +39,33 @@ somebody writes another one, `F-00` has been undone. Add a prop instead.
 3. **Every list body is `{count, next, previous, results}`,** never an array (issue #77). Use
    `unwrapList`. For a conversation use `fetchAllPages` — `PAGE_SIZE` is 50 and messages are ordered
    oldest-first, so reading only `results` shows the first 50 messages ever sent and hides the rest.
+
+## Confirming a destructive action
+
+`useConfirm()` answers `[confirm, dialog]`. Call `confirm(options)` and render `dialog`:
+
+```jsx
+const [confirm, confirmDialog] = useConfirm();
+
+const destroy = async () => {
+  if (!(await confirm({ title: 'Delete it?', body: 'This cannot be undone.' }))) return;
+  await remove();
+};
+
+return (<>{page}{confirmDialog}</>);
+```
+
+Three things to know before you use it.
+
+- **Call the hook above any early `return`.** `ChannelsDashboard` and `GroupSettings` both return
+  early — for a stale query parameter and for the loading state — and a hook underneath one of those
+  runs on some renders and not others.
+- **Render `dialog` as a sibling of a surrounding modal, not a child.** `ScheduleMessage`'s backdrop
+  carries `backdrop-blur`, which makes it the containing block for any `fixed` descendant. The
+  dialog is `fixed inset-0` and carries the same `z-50`, so being *later in the DOM* is what puts it
+  on top.
+- **It confirms an intention; it grants nothing.** `roles` is the authority (`architecture.tex`
+  §5.1) and the server refuses regardless of what the UI drew. Do not give it a permission prop.
 
 There is no message endpoint nested under a channel or a group. A channel message is
 `POST /api/messages/` with a `topic`, read at `?topic_id=`; `channels/<id>/topics/<id>/messages/`

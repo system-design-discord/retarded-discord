@@ -3,7 +3,7 @@ import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import useChannels from '../../hooks/useChannels';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
-import { EmptyState } from '../chat/primitives';
+import { EmptyState, useConfirm } from '../chat/primitives';
 import CreateChannelModal from './CreateChannelModal';
 
 // F-04 — US-4.1. The channels a user belongs to, and the way into each one.
@@ -28,6 +28,9 @@ export default function ChannelsDashboard() {
   const [creating, setCreating] = useState(false);
   const [deleted, setDeleted] = useState(null);
   const [searchParams] = useSearchParams();
+  // Above the `stale` redirect below, which returns early — a hook after it
+  // would run on some renders and not others.
+  const [confirm, confirmDialog] = useConfirm();
 
   // `?channel=<id>&topic=<id>` is the URL SearchMessages emitted for a channel
   // hit before this screen existed — a route that could never open anything.
@@ -47,10 +50,18 @@ export default function ChannelsDashboard() {
   const owns = (channel) => channel.owner?.id === user?.id;
 
   const confirmDelete = async (channel) => {
-    const message =
-      `Delete # ${channel.name}? Its topics, memberships, roles and every message ` +
-      'in them go with it. This cannot be undone.';
-    if (!window.confirm(message)) return;
+    // #139 — the same cascade sentence, in the app's own dialog rather than the
+    // browser's. `window.confirm` blocked the main thread, which on this screen
+    // meant every frame the gateway pushed while it was up was queued instead
+    // of rendered.
+    const confirmed = await confirm({
+      title: `Delete #${channel.name}?`,
+      body:
+        'Its topics, memberships, roles and every message in them go with it. ' +
+        'This cannot be undone.',
+      confirmLabel: 'Delete channel',
+    });
+    if (!confirmed) return;
     const report = await remove(channel.id);
     if (report) setDeleted({ name: channel.name, ...report });
   };
@@ -178,6 +189,7 @@ export default function ChannelsDashboard() {
       </main>
 
       {creating && <CreateChannelModal onClose={() => setCreating(false)} onCreate={create} />}
+      {confirmDialog}
     </div>
   );
 }

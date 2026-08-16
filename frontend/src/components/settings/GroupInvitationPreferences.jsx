@@ -22,6 +22,15 @@ import SettingsTabs from './SettingsTabs';
 // surviving in the one place nobody could observe it, because the endpoint it
 // read 404'd before the parse ever ran.
 //
+// **This is the whole of the product's privacy surface (#99).** The Privacy
+// screen beside it drew five more toggles — non-friend DMs, shared-group DMs,
+// profile visibility, online status, email visibility — and not one of them had
+// a column, an endpoint or a story. That screen is gone and `/settings/privacy`
+// redirects here. What the other toggles gestured at is settled elsewhere and
+// not configurable: `PublicProfileSerializer` withholds email from everybody
+// unconditionally (SH.2), and there is no presence, friend or block entity in
+// `ERD.tex` for the rest to switch on.
+//
 // **Four options become two, and that is the honest number.** The wireframe
 // draws Everyone / Friends or contacts only / Ask for my approval / No one.
 // `Profile.allow_invites` is a boolean, so only the first and the last are
@@ -104,7 +113,11 @@ const GroupInvitationPreferences = () => {
           
           <div className="border-b border-slate-800 pb-6">
             <h1 className="text-3xl font-extrabold text-white mb-2">Group Invitation Preferences</h1>
-            <p className="text-slate-400 text-sm">Choose who is allowed to add you to group conversations.</p>
+            <p className="text-slate-400 text-sm">
+              Choose who is allowed to add you to group conversations. This is the only privacy
+              setting the product has — your email is never shown to another user, and there is no
+              online status to hide.
+            </p>
           </div>
 
           {feedback.message && (

@@ -52,6 +52,26 @@ export async function getMyProfile() {
 }
 
 /**
+ * Another user's profile, by **user id**.
+ *
+ * `ProfileRetrieveAPIView`, `GET /api/profile/<user_id>/`, reading through
+ * `PublicProfileSerializer` — so no `email` and no `allow_invites`, and
+ * `normalizeProfile` fills those as empty rather than the screen branching.
+ *
+ * The id is not incidental. `ViewProfile` called `users/profile/<username>/`,
+ * which is a 404 twice over — wrong prefix and keyed by the wrong thing (#101).
+ * There is no by-username profile endpoint and there is no plan for one: the
+ * user directory answers `{id, username}`, so anything holding a username can
+ * hold the id instead.
+ *
+ * An unknown id is a 404 from the lookup; a user who has never opened Settings
+ * is **not**, because the view creates the row lazily.
+ */
+export async function getPublicProfile(userId) {
+  return normalizeProfile((await api.get(`profile/${userId}/`)).data);
+}
+
+/**
  * Patch the caller's own profile, and answer what the server stored.
  *
  * Takes camelCase-free field names because they go straight at the API:
