@@ -94,15 +94,25 @@ class MessageDetailView(generics.RetrieveUpdateDestroyAPIView):
         return MessageSerializer
 
     def get_queryset(self):
-        """Everything the caller may read, not only what they wrote.
+        """Everything the caller may read, PLUS their own unsent scheduled messages.
 
         This used to be `filter(sender=self.request.user)`, which meant a direct
         message you *received* was unreadable, and an admin could not reach a
-        message in order to moderate it. A message outside this queryset still
-        returns 404 rather than 403, so nothing leaks the existence of a
-        conversation the caller is not in.
+        message in order to moderate it. 
+        We also explicitly include `is_delivered=False` messages authored by the 
+        requesting user, otherwise they get a 404 when trying to edit their own 
+        pending scheduled messages.
         """
-        return Message.objects.visible_to(self.request.user)
+        user = self.request.user
+        
+        # پیام‌های عادی و ارسال شده که کاربر حق دیدن آن‌ها را دارد
+        visible_messages = Message.objects.visible_to(user)
+        
+        # پیام‌های زمان‌بندی‌شده‌ای که خود کاربر نوشته ولی هنوز ارسال نشده‌اند
+        pending_scheduled = Message.objects.filter(sender=user, is_delivered=False)
+        
+        # ترکیب هر دو کوئری تا هم پیام‌های عادی لود شوند و هم زمان‌بندی‌شده‌های خودش
+        return (visible_messages | pending_scheduled).distinct()
 
     def perform_update(self, serializer):
         """US-3.1 and US-3.2 — only the author, and `roles` says who that is.
