@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../../services/api';
+import { searchMessages } from '../../services/messages';
 import NavSidebar from '../layout/NavSidebar';
 
 // A hit's `conversation.kind` is one of the three targets a message can have,
@@ -30,9 +30,9 @@ const SearchMessages = () => {
     setError('');
 
     try {
-      const response = await api.get('messages/search/', { params: { q: searchQuery } });
-      // Every list endpoint is paginated, so the body is {count, results}.
-      setResults(response.data.results ?? []);
+      // Every page, not just the first: the label below counts what is in
+      // `results`, so keeping one page would report 50 of 60 matches (#103).
+      setResults(await searchMessages(searchQuery));
     } catch {
       setError('The search could not be completed. Please try again.');
       setResults([]);

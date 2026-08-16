@@ -60,6 +60,18 @@ export function listMessages(target) {
 }
 
 /**
+ * US-9.1 — every hit for `q`, across all pages.
+ *
+ * The search screen used to keep `results` alone and then label its length as
+ * the total (#103), so a query matching 60 messages reported "50 matches" and
+ * the other ten were both uncounted and unreachable. Following `next` fixes the
+ * count and the omission together, which reading `count` alone would not.
+ */
+export function searchMessages(q) {
+  return fetchAllPages(api, 'messages/search/', { params: { q } });
+}
+
+/**
  * Every message the caller can see, across all pages.
  *
  * There is no `conversations/` endpoint, so both conversation lists in the app
