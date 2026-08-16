@@ -8,10 +8,14 @@ import NavSidebar from '../layout/NavSidebar';
 // topic case a real destination: `/channels/<id>?topic=<id>` is the channel
 // view with that topic selected, which is why the active topic lives in a query
 // parameter there rather than in component state.
-const openAt = ({ kind, id, channel_id }) => {
-  if (kind === 'group') return `/chat/${id}`;
-  if (kind === 'topic') return `/channels/${channel_id}?topic=${id}`;
-  return `/dms?user=${id}`;
+//
+// `?message=` carries the hit itself (#129). A query parameter rather than
+// router state because the deep link has to survive a reload, which state does
+// not; the shell on the far end reads it and threads it down to `MessageList`.
+const openAt = ({ kind, id, channel_id }, messageId) => {
+  if (kind === 'group') return `/chat/${id}?message=${messageId}`;
+  if (kind === 'topic') return `/channels/${channel_id}?topic=${id}&message=${messageId}`;
+  return `/dms?user=${id}&message=${messageId}`;
 };
 
 const SearchMessages = () => {
@@ -91,7 +95,7 @@ const SearchMessages = () => {
               <button
                 key={result.id}
                 type="button"
-                onClick={() => navigate(openAt(result.conversation))}
+                onClick={() => navigate(openAt(result.conversation, result.id))}
                 className="w-full text-left p-4 bg-slate-900 border border-slate-800 hover:border-indigo-500/50 rounded-xl space-y-2 transition cursor-pointer"
               >
                 <div className="flex items-center justify-between gap-3">
