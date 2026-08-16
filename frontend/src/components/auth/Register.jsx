@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from "../../services/api";
+import PasswordField from './PasswordField';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -80,31 +81,23 @@ export default function Register() {
             />
           </div>
 
-          <div>
-            <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Password</label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition duration-200 text-sm"
-              placeholder="••••••••"
-            />
-          </div>
+          <PasswordField
+            label="Password"
+            name="password"
+            value={formData.password}
+            onChange={handleChange}
+            required
+            placeholder="••••••••"
+          />
 
-          <div>
-            <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Confirm Password</label>
-            <input
-              type="password"
-              name="password_confirm"
-              value={formData.password_confirm}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition duration-200 text-sm"
-              placeholder="••••••••"
-            />
-          </div>
+          <PasswordField
+            label="Confirm Password"
+            name="password_confirm"
+            value={formData.password_confirm}
+            onChange={handleChange}
+            required
+            placeholder="••••••••"
+          />
 
           <button
             type="submit"
