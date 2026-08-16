@@ -1,6 +1,7 @@
 import { useState, useContext } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
+import PasswordField from './PasswordField';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -50,17 +51,13 @@ export default function Login() {
             />
           </div>
 
-          <div>
-            <label className="block text-slate-400 text-xs font-bold uppercase mb-2">Password</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition duration-200 text-sm"
-              placeholder="••••••••"
-            />
-          </div>
+          <PasswordField
+            label="Password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+          />
 
           <button
             type="submit"
