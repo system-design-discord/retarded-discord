@@ -74,6 +74,12 @@ function App() {
         
         <Route path="/profile" element={<PrivateRoute><ViewProfile /></PrivateRoute>} />
         <Route path="/profile/edit" element={<PrivateRoute><EditProfile /></PrivateRoute>} />
+        {/* #101 — another user's profile. Keyed by **id**, because
+            `/api/profile/<user_id>/` is, and declared after `/profile/edit` so
+            the literal segment keeps winning the match. Without this route
+            `ViewProfile`'s public branch was dead code: `useParams()` was
+            always empty and every visit rendered the caller's own profile. */}
+        <Route path="/profile/:userId" element={<PrivateRoute><ViewProfile /></PrivateRoute>} />
         <Route path="/settings/account" element={<PrivateRoute><MyAccount /></PrivateRoute>} />
         <Route path="/settings/privacy" element={<PrivateRoute><PrivacySettings /></PrivateRoute>} />
         <Route path="/settings/invitations" element={<PrivateRoute><GroupInvitationPreferences /></PrivateRoute>} />

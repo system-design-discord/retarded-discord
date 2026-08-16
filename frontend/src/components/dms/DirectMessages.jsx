@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { listDirectMessages } from '../../services/messages';
 import { searchUsers } from '../../services/users';
 import { conversationsFrom, nameMissingPartners } from '../../hooks/useRecentChats';
@@ -27,6 +27,7 @@ import { Avatar, EmptyState } from '../chat/primitives';
 
 export default function DirectMessages() {
   const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [conversations, setConversations] = useState([]);
@@ -210,13 +211,27 @@ export default function DirectMessages() {
           title={active.username}
           subtitle="Direct message"
           headerExtra={
-            <button
-              type="button"
-              onClick={() => setSearchParams({})}
-              className="md:hidden text-xs text-slate-400 hover:text-slate-200 cursor-pointer shrink-0"
-            >
-              ← All
-            </button>
+            <>
+              {/* #101 — the one way into another user's profile. The route
+                  existed nowhere before that card, so `ViewProfile`'s public
+                  branch and the Message button #130 put on it were both
+                  unreachable. The conversation header is where the person
+                  you are reading is already named. */}
+              <button
+                type="button"
+                onClick={() => navigate(`/profile/${active.id}`)}
+                className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer shrink-0"
+              >
+                View profile
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchParams({})}
+                className="md:hidden text-xs text-slate-400 hover:text-slate-200 cursor-pointer shrink-0"
+              >
+                ← All
+              </button>
+            </>
           }
           placeholder={`Message ${active.username}…`}
           emptyTitle="No messages yet"
