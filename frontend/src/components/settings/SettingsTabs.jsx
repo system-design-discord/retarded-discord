@@ -16,10 +16,13 @@ import { NavLink } from 'react-router-dom';
 // Written once and imported three times, for the same reason `NavSidebar` is:
 // three copies is how the rails drifted in the first place.
 
+// Three, not four. The Privacy tab pointed at a screen whose every control was
+// invented (#99); `/settings/privacy` redirects to Group Invitations now, which
+// is where the one real privacy setting has lived since the wireframe promoted
+// it out of Privacy into its own page.
 const TABS = [
   { to: '/settings/account', label: 'My Account' },
   { to: '/profile/edit', label: 'Profile' },
-  { to: '/settings/privacy', label: 'Privacy' },
   { to: '/settings/invitations', label: 'Group Invitations' },
 ];
 
