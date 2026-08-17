@@ -2,14 +2,18 @@ import os
 
 from rest_framework import serializers
 
-from accounts.serializers import UserSerializer
+from accounts.serializers import PublicUserSerializer
 from common import messages
+from common.signed_media import SignedFileField
 
 from .models import MediaFile
 
 
 class MediaFileSerializer(serializers.ModelSerializer):
-    user = UserSerializer(read_only=True)
+    # A-2 — the uploader's email is not part of an attachment.
+    user = PublicUserSerializer(read_only=True)
+    # A-1 — the rendered URL carries the token that authorises reading it.
+    file = SignedFileField()
 
     class Meta:
         model = MediaFile

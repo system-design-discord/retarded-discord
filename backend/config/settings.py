@@ -155,6 +155,24 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.environ.get('DJANGO_MEDIA_ROOT', BASE_DIR / 'media')
 
+# A-1 — uploads are not public. `common.signed_media` mints a token into every
+# file URL the API renders and `media_app.views.protected_media` checks it, so
+# the bytes are reachable by a link the API handed you and by nothing else.
+#
+# The TTL only has to outlive a page's state: the SPA holds a message list in
+# memory and re-renders the same URLs, so a week is generous and a short expiry
+# would break a long-lived tab rather than protect anything.
+MEDIA_URL_TTL = int(os.environ.get('DJANGO_MEDIA_URL_TTL', 60 * 60 * 24 * 7))
+
+# nginx serves the verified bytes through an `internal` location, so daphne
+# never streams a file. Turn this off to serve through Django instead, which is
+# what `npm run dev` against a bare runserver needs — there is no nginx there to
+# honour the header.
+MEDIA_INTERNAL_REDIRECT = env_bool('DJANGO_MEDIA_INTERNAL_REDIRECT', True)
+MEDIA_INTERNAL_LOCATION = os.environ.get(
+    'DJANGO_MEDIA_INTERNAL_LOCATION', '/__protected_media/'
+)
+
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (

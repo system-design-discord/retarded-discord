@@ -4,6 +4,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from common import messages
+from common.signed_media import SignedImageField
 
 from .models import Profile
 
@@ -92,6 +93,7 @@ class PublicProfileSerializer(serializers.ModelSerializer):
     """
 
     user = PublicUserSerializer(read_only=True)
+    avatar = SignedImageField(read_only=True)
 
     class Meta:
         model = Profile
@@ -107,7 +109,10 @@ BIO_MAX_LENGTH = 200
 
 
 class ProfileSerializer(serializers.ModelSerializer):
+    # `UserSerializer` here and not `PublicUserSerializer`: this is the caller's
+    # own account, and their own address is theirs to read (A-2).
     user = UserSerializer(read_only=True)
+    avatar = SignedImageField(required=False, allow_null=True)
     email = serializers.EmailField(source='user.email', required=False)
     username = serializers.CharField(source='user.username', required=False)
     bio = serializers.CharField(

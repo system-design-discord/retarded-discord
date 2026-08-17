@@ -6,12 +6,21 @@ restricted channel is `roles.services.may_send_media`'s answer, and this module
 asks for it (architecture.tex §5.1).
 """
 
+import mimetypes
+import posixpath
+from urllib.parse import quote
+
+from django.conf import settings
+from django.core.files.storage import default_storage
 from django.db.models import Q
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404
+from django.views.decorators.http import require_safe
 from rest_framework import generics, permissions
 from rest_framework.parsers import FormParser, MultiPartParser
 
 from channels_app.models import Topic
+from common import messages, signed_media
 from roles import services as roles
 
 from .models import MediaFile
@@ -66,3 +75,40 @@ class MediaDetailView(generics.RetrieveDestroyAPIView):
             | Q(message__recipient=user)
             | Q(message__group__members=user)
         ).distinct()
+
+
+@require_safe
+def protected_media(request, path):
+    """Serve an upload to whoever holds a signed link to it (A-1).
+
+    Deliberately not an authenticated view: the SPA renders attachments and
+    avatars in `<img>` and `<video>` tags, which send no `Authorization`
+    header, so the token in the URL is the credential. `common.signed_media`
+    explains the trade.
+
+    The bytes themselves are nginx's job — this answers with `X-Accel-Redirect`
+    into an `internal` location so daphne is not tied up streaming a file, and
+    so the volume stays unreachable by any path a client can ask for directly.
+    """
+    name = posixpath.normpath(path).lstrip('/')
+    if name == '..' or name.startswith('../') or '\\' in path:
+        raise Http404
+
+    if not signed_media.verify(name, request.GET.get(signed_media.TOKEN_PARAM)):
+        return HttpResponseForbidden(messages.MEDIA_LINK_NOT_VALID)
+
+    content_type = mimetypes.guess_type(name)[0] or 'application/octet-stream'
+
+    if not settings.MEDIA_INTERNAL_REDIRECT:
+        if not default_storage.exists(name):
+            raise Http404
+        return FileResponse(default_storage.open(name, 'rb'), content_type=content_type)
+
+    response = HttpResponse(content_type=content_type)
+    response['X-Accel-Redirect'] = settings.MEDIA_INTERNAL_LOCATION + quote(name)
+    # nginx fills the body and its length from the file it opens.
+    del response['Content-Length']
+    # The volume holds whatever users uploaded; never let a browser re-decide
+    # what a stored file is.
+    response['X-Content-Type-Options'] = 'nosniff'
+    return response

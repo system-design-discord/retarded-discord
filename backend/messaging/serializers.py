@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from accounts.serializers import UserSerializer
+from accounts.serializers import PublicUserSerializer
 from common import messages
 from media_app.serializers import MediaFileSerializer
 
@@ -13,7 +13,7 @@ TARGET_FIELDS = ('recipient', 'group', 'topic')
 
 
 class MessageSerializer(serializers.ModelSerializer):
-    sender = UserSerializer(read_only=True)
+    sender = PublicUserSerializer(read_only=True)
     media = MediaFileSerializer(read_only=True)
     media_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
 
@@ -62,7 +62,7 @@ class MessageEditSerializer(serializers.ModelSerializer):
     makes that structural rather than a rule somebody has to remember.
     """
 
-    sender = UserSerializer(read_only=True)
+    sender = PublicUserSerializer(read_only=True)
     media = MediaFileSerializer(read_only=True)
 
     class Meta:

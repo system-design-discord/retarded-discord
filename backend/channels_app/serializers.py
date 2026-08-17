@@ -7,8 +7,9 @@ blank, a topic name that is unique inside its channel — and every question of
 
 from rest_framework import serializers
 
-from accounts.serializers import UserSerializer
+from accounts.serializers import PublicUserSerializer
 from common import messages
+from common.signed_media import SignedImageField
 
 from .models import Channel, ChannelMember, Topic
 
@@ -55,7 +56,9 @@ class ChannelSerializer(serializers.ModelSerializer):
     view is already gated on `can_edit_channel`.
     """
 
-    owner = UserSerializer(read_only=True)
+    # A-2 — the owner's email is not part of a channel's public shape.
+    owner = PublicUserSerializer(read_only=True)
+    avatar = SignedImageField(required=False, allow_null=True)
     topics = TopicSerializer(many=True, read_only=True)
     member_count = serializers.IntegerField(source='memberships.count', read_only=True)
 
@@ -82,7 +85,7 @@ class ChannelMemberSerializer(serializers.ModelSerializer):
     changed through the roles API, which owns that column.
     """
 
-    user = UserSerializer(read_only=True)
+    user = PublicUserSerializer(read_only=True)
     role = serializers.CharField(source='role.name', read_only=True, allow_null=True)
     is_owner = serializers.SerializerMethodField()
 

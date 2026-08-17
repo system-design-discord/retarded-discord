@@ -271,7 +271,6 @@ export default function GroupSettings() {
                   <Avatar name={member.username} size="sm" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-slate-200 truncate">{member.username}</div>
-                    <div className="text-[11px] text-slate-600 truncate">{member.email}</div>
                   </div>
                   {member.id === admin?.id && (
                     <span className="text-[10px] uppercase tracking-wide text-indigo-400 shrink-0">
