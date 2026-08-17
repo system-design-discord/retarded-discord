@@ -2,7 +2,7 @@ import { useContext, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import useChannel from '../../hooks/useChannel';
 import useChannelPermissions from '../../hooks/useChannelPermissions';
-import { CAN_CREATE_TOPIC } from '../../lib/permissions';
+import { CAN_CREATE_TOPIC, CAN_SEND_MEDIA } from '../../lib/permissions';
 import { listMembers } from '../../services/roles';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
@@ -82,6 +82,23 @@ export default function ChannelView() {
   // exercises and what the acceptance criterion actually says. Not rendering a
   // button the server would refuse is a courtesy to the user, nothing more.
   const mayCreateTopic = can(CAN_CREATE_TOPIC);
+
+  // A-10 / US-2.4 / US-7.3, and the same composition `roles.may_send_media`
+  // makes: an unrestricted channel lets every member attach a file, exactly like
+  // posting text, and a restricted one narrows that to holders of
+  // `can_send_media`. The owner holds all eight implicitly, which is why
+  // `isOwner` short-circuits here as it does there.
+  //
+  // Composing it here rather than reading `media_restricted` inside the composer
+  // is the point of #123's second criterion: until now the toggle governed an
+  // action nobody could perform, so nothing observed it. The server refuses the
+  // upload and the attach regardless — this only stops offering a control that
+  // was always going to 403.
+  const restricted = Boolean(channel?.media_restricted);
+  const maySendMedia = !restricted || isOwner || can(CAN_SEND_MEDIA);
+  const mediaRestrictionReason = maySendMedia
+    ? ''
+    : 'Media is restricted in this channel, and your role here does not grant can_send_media. You can still send text.';
 
   const submitTopic = async (event) => {
     event.preventDefault();
@@ -215,6 +232,8 @@ export default function ChannelView() {
             placeholder={`Message #${active.name}…`}
             emptyHint="Be the first to say something in this topic."
             canDelete={canDelete}
+            canSendMedia={maySendMedia}
+            mediaRestrictionReason={mediaRestrictionReason}
             aside={
               <aside className="w-60 shrink-0 border-l border-slate-800 bg-slate-900/60 p-4 overflow-y-auto hidden lg:block">
                 <h3 className="text-xs font-bold uppercase text-slate-500 tracking-wider mb-3">

@@ -66,6 +66,11 @@ export const CAN_CREATE_TOPIC = 'can_create_topic';
 // on, named here for the same reason as above.
 export const CAN_EDIT_CHANNEL = 'can_edit_channel';
 
+// #123 — the key `ChannelView` composes with `Channel.media_restricted` to
+// decide whether to offer the attach control, mirroring
+// `roles.services.may_send_media`.
+export const CAN_SEND_MEDIA = 'can_send_media';
+
 /** Just the keys, in model order. */
 export const PERMISSION_KEYS = PERMISSIONS.map((permission) => permission.key);
 
