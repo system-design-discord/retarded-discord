@@ -6,7 +6,7 @@ from accounts.serializers import PublicUserSerializer
 from common import messages
 from common.signed_media import SignedFileField
 
-from .models import MediaFile
+from .models import EXTENSION_TYPES, MediaFile
 
 
 class MediaFileSerializer(serializers.ModelSerializer):
@@ -21,7 +21,9 @@ class MediaFileSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'user', 'file_type', 'file_size', 'uploaded_at']
 
     def validate_file(self, value):
-        allowed_extensions = ['.jpg', '.jpeg', '.png', '.mp4', '.mp3', '.pdf', '.zip']
+        # A-5 — the allowlist *is* the classifier's table. Anything the model
+        # knows how to name, the API accepts.
+        allowed_extensions = sorted(EXTENSION_TYPES)
         ext = os.path.splitext(value.name)[1].lower()
 
         if ext not in allowed_extensions:

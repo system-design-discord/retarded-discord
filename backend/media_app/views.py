@@ -17,6 +17,7 @@ from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidd
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_safe
 from rest_framework import generics, permissions
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import FormParser, MultiPartParser
 
 from channels_app.models import Topic
@@ -68,13 +69,35 @@ class MediaDetailView(generics.RetrieveDestroyAPIView):
     def get_queryset(self):
         # US-7.2 — the uploader, plus anyone in a conversation the file was
         # attached to. The check sits in front of the file, not on the path.
+        #
+        # A-6 — the topic arms were missing, so a channel member who could read
+        # a message could not read the record of the image attached to it. The
+        # clauses are the ones `MessageQuerySet._audience` already uses; a
+        # conversation this view does not know about is a conversation it
+        # refuses, which is the failure mode worth naming.
         user = self.request.user
         return MediaFile.objects.filter(
             Q(user=user)
             | Q(message__sender=user)
             | Q(message__recipient=user)
             | Q(message__group__members=user)
+            | Q(message__topic__channel__memberships__user=user)
+            | Q(message__topic__channel__owner=user)
         ).distinct()
+
+    def perform_destroy(self, instance):
+        """Reading a file and destroying it are not the same right.
+
+        The queryset above admits everyone who shares the conversation, which is
+        correct for `GET` and would be a data-loss hole for `DELETE`: a DM
+        recipient, any group member and — since A-6 widened it — any channel
+        member could remove somebody else's upload. Not filed in the audit;
+        found while widening the scope, and fixed in the same change rather than
+        left as a wider hole than the one being closed.
+        """
+        if instance.user_id != self.request.user.id:
+            raise PermissionDenied(messages.NOT_MEDIA_OWNER)
+        instance.delete()
 
 
 @require_safe

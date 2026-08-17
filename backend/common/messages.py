@@ -82,6 +82,7 @@ INVALID_CREDENTIALS = "Invalid email, username, or password."
 FILE_TYPE_NOT_ALLOWED = "File type not allowed. Allowed types: {allowed}."
 FILE_TOO_LARGE = "A file cannot be larger than {limit_mb} MB."
 MEDIA_LINK_NOT_VALID = "This media link is not valid or has expired."
+NOT_MEDIA_OWNER = "Only the person who uploaded a file can delete it."
 
 # --- Scheduling -------------------------------------------------------------
 
