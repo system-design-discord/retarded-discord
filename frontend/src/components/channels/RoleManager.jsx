@@ -2,10 +2,17 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import useChannelPermissions from '../../hooks/useChannelPermissions';
 import useChannelRoles from '../../hooks/useChannelRoles';
-import { CAN_EDIT_CHANNEL, PERMISSIONS, PERMISSION_KEYS } from '../../lib/permissions';
+import {
+  CAN_ADD_MEMBER,
+  CAN_EDIT_CHANNEL,
+  CAN_REMOVE_MEMBER,
+  PERMISSIONS,
+  PERMISSION_KEYS,
+} from '../../lib/permissions';
 import { getChannel, updateChannel } from '../../services/channels';
+import { searchUsers } from '../../services/users';
 import NavSidebar from '../layout/NavSidebar';
-import { EmptyState } from '../chat/primitives';
+import { Avatar, EmptyState, useConfirm } from '../chat/primitives';
 
 // F-06 — US-4.2, US-8.1, US-8.2, US-8.3.
 //
@@ -28,6 +35,14 @@ import { EmptyState } from '../chat/primitives';
 // US-8.2 is why the toggles are gated by what *you* hold: "assign various
 // capabilities that fall within my own permissions". `RoleSerializer.validate`
 // enforces it and answers 400 per offending field; the messages surface here.
+//
+// **#142 put membership on this screen**, and it follows `GroupSettings.jsx`
+// rather than inventing a second pattern: the same `services/users.js` directory
+// picker, the same candidate filtering, the same `useConfirm` before a removal.
+// Three permissions now gate three different things here and they are genuinely
+// independent — `can_change_role` for the role editor and the role `<select>`,
+// `can_add_member` for the picker, `can_remove_member` for the Remove buttons —
+// so the screen is no longer all-or-nothing on the first of them.
 
 function PermissionGrid({ role, heldByActor, disabled, onToggle }) {
   return (
@@ -162,14 +177,38 @@ export default function RoleManager() {
   // Do not fire the roles list at somebody who cannot read it. It needs
   // `can_change_role`, so asking anyway would trade a rendered explanation for
   // a 403 in the console.
-  const { roles, members, loading, error, setError, create, update, remove, assign } = useChannelRoles(
-    channelId,
-    { enabled: mayManage },
-  );
+  // `enabled` gates the *roles* half only. Members load for anybody who can see
+  // the channel, which is what lets a holder of `can_add_member` alone use this
+  // screen at all — see the note in `useChannelRoles`.
+  const {
+    roles,
+    members,
+    loading,
+    error,
+    setError,
+    create,
+    update,
+    remove,
+    assign,
+    addMember,
+    removeMember,
+  } = useChannelRoles(channelId, { enabled: mayManage });
+
+  const mayAddMember = can(CAN_ADD_MEMBER);
+  const mayRemoveMember = can(CAN_REMOVE_MEMBER);
 
   const [channel, setChannel] = useState(null);
   const [newRoleName, setNewRoleName] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // The directory picker, the same shape `GroupSettings.jsx` uses.
+  const [term, setTerm] = useState('');
+  const [candidates, setCandidates] = useState([]);
+  const [searched, setSearched] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [busyUserId, setBusyUserId] = useState(null);
+
+  const [confirm, confirmDialog] = useConfirm();
 
   // A-10 — the media restriction is a plain field on the channel, so the
   // existing `updateChannel` is the whole write. No new service function.
@@ -207,6 +246,52 @@ export default function RoleManager() {
       setBusy(false);
     }
   };
+
+  const searchDirectory = async (event) => {
+    event.preventDefault();
+    if (!term.trim()) return;
+
+    setSearching(true);
+    try {
+      setCandidates(await searchUsers(term));
+      setSearched(true);
+    } catch {
+      setCandidates([]);
+      setSearched(false);
+      setError('The user search could not be completed.');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const add = async (candidate) => {
+    setBusyUserId(candidate.id);
+    await addMember(candidate.id);
+    setBusyUserId(null);
+    // Succeeded or refused, the picker's copy of who is in the channel is now
+    // stale. Dropping the row is cheaper than reasoning about which it was, and
+    // the member list below has already been re-read from the server.
+    setCandidates((current) => current.filter((row) => row.id !== candidate.id));
+  };
+
+  const kick = async (member) => {
+    const confirmed = await confirm({
+      title: `Remove ${member.user.username} from # ${channel?.name ?? 'this channel'}?`,
+      body: 'They lose access to the channel, its topics and every message in them. Their role here goes with them; their messages stay.',
+      confirmLabel: 'Remove',
+    });
+    if (!confirmed) return;
+
+    setBusyUserId(member.user.id);
+    await removeMember(member.user.id);
+    setBusyUserId(null);
+  };
+
+  // Somebody already in the channel is not a candidate. The API answers 400 for
+  // a duplicate, so this is about not offering the mistake rather than about
+  // hiding its consequence.
+  const memberUserIds = new Set(members.map((member) => member.user.id));
+  const addable = candidates.filter((candidate) => !memberUserIds.has(candidate.id));
 
   const heldByActor = permissions ?? {};
 
@@ -279,10 +364,14 @@ export default function RoleManager() {
 
         {loadingPermissions ? (
           <p className="text-sm text-slate-500">Loading…</p>
-        ) : !mayManage ? (
-          // Not an error, an answer. The server would refuse every write on
-          // this screen, so it says so instead of rendering controls that 403.
-          <section className="max-w-2xl rounded-xl border border-slate-800 bg-slate-900 p-6">
+        ) : (
+          <div className="space-y-6">
+            {/* Not an error, an answer. The server would refuse every *role*
+                write, so this says so instead of rendering controls that 403.
+                Since #142 it is no longer the whole screen: membership is a
+                different permission and the panel below may still be usable. */}
+            {!mayManage && (
+            <section className="max-w-2xl rounded-xl border border-slate-800 bg-slate-900 p-6">
             <h2 className="font-semibold">You cannot manage roles here</h2>
             <p className="text-sm text-slate-400 mt-1">
               Managing roles needs <code className="text-slate-300">can_change_role</code>, which you do
@@ -302,9 +391,11 @@ export default function RoleManager() {
                 </li>
               ))}
             </ul>
-          </section>
-        ) : (
+            </section>
+            )}
+
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+            {mayManage && (
             <section>
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3">Roles</h2>
 
@@ -361,58 +452,161 @@ export default function RoleManager() {
                 </ul>
               )}
             </section>
+            )}
 
-            <section>
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3">Members</h2>
+            <section className="space-y-6">
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-3">Members</h2>
 
-              {loading ? (
-                <p className="text-sm text-slate-500">Loading…</p>
-              ) : members.length === 0 ? (
-                <EmptyState icon="👥" title="This channel has no members" />
-              ) : (
-                <ul className="space-y-2">
-                  {members.map((member) => (
-                    <li
-                      key={member.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900 px-4 py-3"
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-sm font-medium truncate">{member.user.username}</span>
-                        {member.is_owner && (
-                          <span className="block text-[10px] uppercase tracking-wider text-amber-500">
-                            Owner · holds all eight
-                          </span>
-                        )}
-                      </span>
-
-                      <select
-                        value={member.role_id ?? ''}
-                        disabled={busy || member.is_owner}
-                        title={
-                          member.is_owner
-                            ? 'The channel owner holds every permission implicitly; a role would add nothing.'
-                            : undefined
-                        }
-                        onChange={(event) =>
-                          run(() => assign(member.user.id, event.target.value ? Number(event.target.value) : null))
-                        }
-                        className="shrink-0 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs disabled:opacity-40 cursor-pointer"
+                {loading ? (
+                  <p className="text-sm text-slate-500">Loading…</p>
+                ) : members.length === 0 ? (
+                  <EmptyState icon="👥" title="This channel has no members" />
+                ) : (
+                  <ul className="space-y-2">
+                    {members.map((member) => (
+                      <li
+                        key={member.id}
+                        className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900 px-4 py-3"
                       >
-                        <option value="">No role</option>
-                        {roles.map((role) => (
-                          <option key={role.id} value={role.id}>
-                            {role.name}
-                          </option>
-                        ))}
-                      </select>
-                    </li>
-                  ))}
-                </ul>
+                        <Avatar name={member.user.username} size="sm" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium truncate">{member.user.username}</span>
+                          {member.is_owner && (
+                            <span className="block text-[10px] uppercase tracking-wider text-amber-500">
+                              Owner · holds all eight
+                            </span>
+                          )}
+                        </span>
+
+                        {/* The role `<select>` is `can_change_role`'s, and it is
+                            the one control here that needs the roles list to
+                            have loaded. Without that permission there are no
+                            roles to choose from, so there is nothing to draw. */}
+                        {mayManage && (
+                          <select
+                            value={member.role_id ?? ''}
+                            disabled={busy || member.is_owner}
+                            title={
+                              member.is_owner
+                                ? 'The channel owner holds every permission implicitly; a role would add nothing.'
+                                : undefined
+                            }
+                            onChange={(event) =>
+                              run(() => assign(member.user.id, event.target.value ? Number(event.target.value) : null))
+                            }
+                            className="shrink-0 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs disabled:opacity-40 cursor-pointer"
+                          >
+                            <option value="">No role</option>
+                            {roles.map((role) => (
+                              <option key={role.id} value={role.id}>
+                                {role.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        {/* US-4.3. The owner's row offers nothing, and that is
+                            not squeamishness: `ChannelMemberDetailView` answers
+                            400 for it, because `ERD.tex` makes
+                            `Channel : ChannelMember` a `1 : 1..N` and a channel
+                            whose owner left is one nobody can administer. */}
+                        {mayRemoveMember && !member.is_owner && (
+                          <button
+                            type="button"
+                            onClick={() => kick(member)}
+                            disabled={busyUserId === member.user.id}
+                            className="shrink-0 text-xs text-rose-400 hover:text-rose-300 transition cursor-pointer disabled:opacity-50"
+                          >
+                            {busyUserId === member.user.id ? '…' : 'Remove'}
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* US-4.4 / SH.1 — added directly, not invited. */}
+              {mayAddMember && (
+                <div className="space-y-3">
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400">
+                    Add a member
+                  </h2>
+
+                  <form onSubmit={searchDirectory} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={term}
+                      placeholder="Search by username"
+                      onChange={(event) => setTerm(event.target.value)}
+                      className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-600"
+                    />
+                    <button
+                      type="submit"
+                      disabled={searching || !term.trim()}
+                      className="shrink-0 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl px-4 py-2.5 text-sm font-medium transition cursor-pointer disabled:opacity-50"
+                    >
+                      {searching ? 'Searching…' : 'Search'}
+                    </button>
+                  </form>
+
+                  <div className="space-y-1">
+                    {addable.map((candidate) => (
+                      <div
+                        key={candidate.id}
+                        className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-800/60 transition"
+                      >
+                        <Avatar name={candidate.username} size="sm" />
+                        <span className="flex-1 min-w-0 text-sm text-slate-300 truncate">
+                          {candidate.username}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => add(candidate)}
+                          disabled={busyUserId === candidate.id}
+                          className="shrink-0 text-xs text-indigo-400 hover:text-indigo-300 transition cursor-pointer disabled:opacity-50"
+                        >
+                          {busyUserId === candidate.id ? '…' : 'Add'}
+                        </button>
+                      </div>
+                    ))}
+                    {candidates.length > 0 && addable.length === 0 && (
+                      <div className="text-xs text-slate-600">
+                        Everyone matching that is already a member.
+                      </div>
+                    )}
+                    {searched && candidates.length === 0 && (
+                      <div className="text-xs text-slate-600">
+                        Nobody matched that name. The directory matches whole and partial usernames,
+                        and never lists your own account.
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-slate-500">
+                    If somebody has turned invitations off, the API refuses and names them. That
+                    setting is deliberately not readable in advance — SH.2 — so this cannot warn you
+                    first.
+                  </p>
+                </div>
+              )}
+
+              {!mayAddMember && !mayRemoveMember && (
+                <p className="text-xs text-slate-500">
+                  Adding and removing members needs{' '}
+                  <code className="text-slate-300">can_add_member</code> or{' '}
+                  <code className="text-slate-300">can_remove_member</code>, neither of which you
+                  hold here.
+                </p>
               )}
             </section>
           </div>
+          </div>
         )}
       </main>
+
+      {confirmDialog}
     </div>
   );
 }
