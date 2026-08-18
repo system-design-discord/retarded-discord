@@ -102,7 +102,15 @@ class MessageQuerySet(models.QuerySet):
         # the scope that decides what may be read is also what hides it — from
         # its own author included, who reads a pending schedule through
         # `/api/messages/scheduled/` instead.
-        return self.filter(is_delivered=True).filter(self._audience(user)).distinct()
+        return (
+            self.filter(is_delivered=True)
+            .filter(self._audience(user))
+            # `MessageSerializer.sender` renders the author's avatar through
+            # `PublicUserSerializer`, which reads `user.profile`. Without this a
+            # fifty-message page is fifty-one queries.
+            .select_related('sender__profile')
+            .distinct()
+        )
 
     def readable_by(self, user):
         """`visible_to`, plus the caller's own *pending* scheduled messages.
@@ -129,9 +137,12 @@ class MessageQuerySet(models.QuerySet):
         if user is None or not user.is_authenticated:
             return self.none()
 
-        return self.filter(Q(is_delivered=True) | Q(sender=user)).filter(
-            self._audience(user)
-        ).distinct()
+        return (
+            self.filter(Q(is_delivered=True) | Q(sender=user))
+            .filter(self._audience(user))
+            .select_related('sender__profile')
+            .distinct()
+        )
 
     def search(self, term):
         """US-9.1 — messages whose text matches `term`, best match first.

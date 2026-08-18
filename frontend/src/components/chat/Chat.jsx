@@ -2,7 +2,7 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import useConversation from '../../hooks/useConversation';
 import ScheduleMessage from './ScheduleMessage';
-import { MessageComposer, MessageList } from './primitives';
+import { Avatar, MessageComposer, MessageList } from './primitives';
 
 // The conversation view, and the only one. It takes a target and renders it:
 // a direct message, a group, or a channel topic. Nothing in here knows which,
@@ -24,6 +24,16 @@ export default function Chat({
   kind,
   id,
   title,
+  // The conversation's own picture, when it has one. A group and a channel both
+  // carry an `avatar` and neither was ever drawn outside its settings screen —
+  // this header said `title` in text for all three kinds, so a group you had
+  // given a picture to looked exactly like one you had not. Optional because a
+  // direct message has no picture of its *own*: the person has one, and
+  // `DirectMessages` already draws it in the rail.
+  //
+  // No `online` prop is passed with it, deliberately. `Avatar` draws the
+  // presence dot only when told to, and a room is never online.
+  avatar,
   subtitle,
   headerExtra,
   aside,
@@ -116,9 +126,14 @@ export default function Chat({
     <div className="flex-1 min-w-0 bg-slate-900 flex">
       <main className="flex-1 min-w-0 flex flex-col">
         <header className="p-4 border-b border-slate-800 flex items-center justify-between gap-4 bg-slate-900/90 backdrop-blur">
-          <div className="min-w-0">
-            <h2 className="font-bold text-slate-100 truncate">{title}</h2>
-            {subtitle && <p className="text-xs text-slate-500 truncate mt-0.5">{subtitle}</p>}
+          <div className="min-w-0 flex items-center gap-3">
+            {avatar !== undefined && (
+              <Avatar name={title} src={avatar} alt={title ? `${title}` : 'conversation'} size="md" />
+            )}
+            <div className="min-w-0">
+              <h2 className="font-bold text-slate-100 truncate">{title}</h2>
+              {subtitle && <p className="text-xs text-slate-500 truncate mt-0.5">{subtitle}</p>}
+            </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             {/* F-07's only visible surface. The distinction is worth showing

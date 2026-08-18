@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import usePresence from './usePresence';
 import api from '../services/api';
 import { listVisibleMessages } from '../services/messages';
 import { listGroups } from '../services/groups';
@@ -25,47 +26,70 @@ export function conversationsFrom(messages, meId) {
     if (!partnerId || partnerId === meId) continue;
 
     const known = byPartner.get(partnerId);
-    const username = message.sender?.id === partnerId ? message.sender.username : known?.username;
+    const fromPartner = message.sender?.id === partnerId;
+    const username = fromPartner ? message.sender.username : known?.username;
+    // The avatar rides along with the username and for the same reason: it is
+    // only present on messages the *partner* sent, because `sender` is the only
+    // nested user a message carries. When they have never replied it stays null
+    // and `nameMissingPartners` fills it from their profile.
+    const avatar = fromPartner ? message.sender.avatar ?? null : known?.avatar ?? null;
 
     if (!known || new Date(message.created_at) >= new Date(known.at)) {
       byPartner.set(partnerId, {
         id: partnerId,
         username: username ?? known?.username ?? null,
+        avatar: avatar ?? known?.avatar ?? null,
         preview: message.text ?? '',
         at: message.created_at,
       });
     } else if (username && !known.username) {
-      byPartner.set(partnerId, { ...known, username });
+      byPartner.set(partnerId, { ...known, username, avatar: avatar ?? known.avatar });
     }
   }
 
   return [...byPartner.values()].sort((a, b) => new Date(b.at) - new Date(a.at));
 }
 
-/** Fill in the usernames the message payload could not supply. */
+/** Fill in the display fields the message payload could not supply.
+ *
+ *  One request answers both: `/api/profile/<id>/` carries the username and the
+ *  avatar together, so a correspondent who has never replied gets a face as
+ *  well as a name rather than a name and a letter. */
 export async function nameMissingPartners(conversations) {
   const unnamed = conversations.filter((conversation) => !conversation.username);
   if (unnamed.length === 0) return conversations;
 
-  const names = new Map();
+  const found = new Map();
   await Promise.all(
     unnamed.map(async ({ id }) => {
       try {
         const { data } = await api.get(`profile/${id}/`);
-        names.set(id, data.user?.username ?? `User ${id}`);
+        found.set(id, {
+          username: data.user?.username ?? `User ${id}`,
+          avatar: data.avatar ?? null,
+        });
       } catch {
-        names.set(id, `User ${id}`);
+        found.set(id, { username: `User ${id}`, avatar: null });
       }
     }),
   );
 
   return conversations.map((conversation) =>
-    conversation.username ? conversation : { ...conversation, username: names.get(conversation.id) },
+    conversation.username
+      ? conversation
+      : { ...conversation, ...found.get(conversation.id) },
   );
 }
 
-/** Group messages into one row per group, newest first. */
-function groupThreadsFrom(messages, groupNames) {
+/** Group messages into one row per group, newest first.
+ *
+ *  `groupsById` is the whole row and not just the name, because a group has a
+ *  picture as well — the same one `GroupSettings` uploads — and a rail that
+ *  drew a face for every direct message and a blank square for every group was
+ *  drawing a distinction the product does not make. A message payload cannot
+ *  supply it: `group` comes back as a bare id, which is why this map exists at
+ *  all. */
+function groupThreadsFrom(messages, groupsById) {
   const byGroup = new Map();
 
   for (const message of messages) {
@@ -74,11 +98,14 @@ function groupThreadsFrom(messages, groupNames) {
     const known = byGroup.get(message.group);
     if (known && new Date(message.created_at) < new Date(known.at)) continue;
 
+    const group = groupsById.get(message.group);
+
     byGroup.set(message.group, {
       id: message.group,
       // A group the caller is in but which has no name yet is still a real
       // row; falling back keeps it clickable rather than blank.
-      title: groupNames.get(message.group) ?? `Group ${message.group}`,
+      title: group?.name ?? `Group ${message.group}`,
+      avatar: group?.avatar ?? null,
       preview: message.sender?.username
         ? `${message.sender.username}: ${message.text ?? ''}`
         : (message.text ?? ''),
@@ -99,6 +126,8 @@ function groupThreadsFrom(messages, groupNames) {
  * halves resolve their names differently.
  */
 export default function useRecentChats(meId, { limit = 6 } = {}) {
+  const { profileVersion, structure } = usePresence();
+
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -112,7 +141,7 @@ export default function useRecentChats(meId, { limit = 6 } = {}) {
       // a name missing from this map renders as a blank conversation title.
       const [messages, groups] = await Promise.all([listVisibleMessages(), listGroups()]);
 
-      const groupNames = new Map(groups.map((group) => [group.id, group.name]));
+      const groupsById = new Map(groups.map((group) => [group.id, group]));
 
       const directs = await nameMissingPartners(
         conversationsFrom(messages.filter((message) => message.recipient !== null), meId),
@@ -123,13 +152,20 @@ export default function useRecentChats(meId, { limit = 6 } = {}) {
           key: `dm-${conversation.id}`,
           to: `/dms?user=${conversation.id}`,
           title: conversation.username,
+          // Carried onto the row rather than left on the conversation, because
+          // the two halves are merged and sorted below and the dashboard reads
+          // only the merged shape.
+          avatar: conversation.avatar ?? null,
+          userId: conversation.id,
           preview: conversation.preview,
           at: conversation.at,
         })),
-        ...groupThreadsFrom(messages, groupNames).map((thread) => ({
+        ...groupThreadsFrom(messages, groupsById).map((thread) => ({
           key: `group-${thread.id}`,
           to: `/groups/${thread.id}/chat`,
           title: thread.title,
+          avatar: thread.avatar,
+          userId: null,
           preview: thread.preview,
           at: thread.at,
         })),
@@ -144,9 +180,17 @@ export default function useRecentChats(meId, { limit = 6 } = {}) {
     }
   }, [meId, limit]);
 
+  // The rail's names come from `nameMissingPartners`, which reads a profile
+  // per correspondent, so any profile changing anywhere may be one of these.
+  //
+  // `structure.version` is here for the other direction: a group that was
+  // deleted or renamed, or one you were just added to, changes which rows this
+  // list should have. The messages of a deleted group are gone at the database
+  // level, so the row disappears on a re-read — but only if something re-reads,
+  // and until this nothing did.
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, profileVersion, structure.version]);
 
   return { chats, loading, error };
 }

@@ -185,3 +185,70 @@ def test_the_recipient_of_a_direct_message_may_not_delete_it(auth_client, user, 
 
     assert delete(auth_client, other_user, message).status_code == 403
     assert Message.objects.filter(pk=message.pk).exists()
+
+
+# --------------------------------------------- the deletion is announced (#RT)
+
+def _capture(event):
+    """Subscribe a recorder to one event and hand back its list. Restored by
+    `conftest.isolated_event_subscribers`."""
+    from common import events
+
+    seen = []
+    events.subscribe(event, lambda **payload: seen.append(payload))
+    return seen
+
+
+@pytest.mark.django_db
+def test_deleting_announces_the_removal_on_the_seam(auth_client, user, other_user):
+    """The other half of "it needs a refresh": a deleted message stayed on the
+    other person's screen until the fallback poll noticed."""
+    from common import events
+
+    message = Message.objects.create(sender=user, recipient=other_user, text='regret')
+    message_id = message.pk
+    seen = _capture(events.MESSAGE_DELETED)
+
+    response = auth_client(user).delete(f'/api/messages/{message.pk}/')
+
+    assert response.status_code == 204
+    assert len(seen) == 1
+    # The id is carried separately because `Model.delete()` nulls `pk`, and an
+    # announcement nobody can match to a row on screen is worthless.
+    assert seen[0]['message_id'] == message_id
+    assert seen[0]['message'].pk is None
+    # The target FKs survive the delete, which is what still names the
+    # conversation to fan out to.
+    assert seen[0]['message'].recipient_id == other_user.pk
+
+
+@pytest.mark.django_db
+def test_a_refused_deletion_announces_nothing(auth_client, user, other_user):
+    """The publish sits after `require_delete_message`, and after the row is
+    actually gone — a 403 reaches neither."""
+    from common import events
+
+    message = Message.objects.create(sender=other_user, recipient=user, text='theirs')
+    seen = _capture(events.MESSAGE_DELETED)
+
+    response = auth_client(user).delete(f'/api/messages/{message.pk}/')
+
+    assert response.status_code == 403
+    assert seen == []
+    assert Message.objects.filter(pk=message.pk).exists()
+
+
+@pytest.mark.django_db
+def test_a_failing_subscriber_does_not_resurrect_the_message(auth_client, user, other_user):
+    from common import events
+
+    def explode(**_):
+        raise RuntimeError('the gateway is down')
+
+    events.subscribe(events.MESSAGE_DELETED, explode)
+    message = Message.objects.create(sender=user, recipient=other_user, text='regret')
+
+    response = auth_client(user).delete(f'/api/messages/{message.pk}/')
+
+    assert response.status_code == 204
+    assert not Message.objects.filter(pk=message.pk).exists()

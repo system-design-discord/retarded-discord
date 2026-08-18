@@ -4,7 +4,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from common import messages
-from common.signed_media import SignedImageField
+from common.signed_media import SignedImageField, signed_url
 
 from .models import Profile
 
@@ -76,12 +76,42 @@ class PublicUserSerializer(serializers.ModelSerializer):
     shape for anybody else, and it is a **separate class rather than an
     `exclude`**: excluding is how a private field creeps back in the next time
     somebody adds one to the model.
+
+    **`avatar` is here on purpose and is the one field ever added.** Every
+    nested representation of a person in the product goes through this class —
+    `MessageSerializer.sender`, the group member list, the channel member list —
+    and each of them renders a face. Without the avatar here the SPA's `Avatar`
+    primitive had nothing but a username to draw, so a user could upload a
+    picture and never see it anywhere except their own profile page. It is
+    `read_only` and it is a display field; the rule this docstring states still
+    holds, and nothing that is not already visible on `/api/profile/<id>/` may
+    be added below it.
+
+    `Profile` is created lazily (`ProfileDetailView` and the privacy view both
+    `get_or_create` it), so a real user may have no profile row at all. Hence
+    `SerializerMethodField` rather than a `source='profile.avatar'` traversal,
+    which raises on exactly those users. Note that the callers listing many of
+    these should `select_related('profile')` — `messaging.models` and the two
+    member serializers do.
     """
+
+    avatar = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'username']
-        read_only_fields = ['id', 'username']
+        fields = ['id', 'username', 'avatar']
+        read_only_fields = ['id', 'username', 'avatar']
+
+    def get_avatar(self, user):
+        profile = getattr(user, 'profile', None)
+        if profile is None or not profile.avatar:
+            return None
+
+        # The same signature `SignedImageField` mints, because `/media/` is
+        # behind the signed-URL gate (A-1) and an unsigned path is refused.
+        # Built by hand rather than by the field because there is no `Profile`
+        # instance to bind a field to when the profile does not exist.
+        return signed_url(profile.avatar.url, profile.avatar.name)
 
 
 class PublicProfileSerializer(serializers.ModelSerializer):

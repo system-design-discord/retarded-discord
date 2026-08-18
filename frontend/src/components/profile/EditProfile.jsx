@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getMyProfile, updateMyProfile } from '../../services/profile';
 import { readApiError } from '../../lib/apiError';
 import NavSidebar from '../layout/NavSidebar';
+import { AuthContext } from '../../context/AuthContext';
 
 // U-13 — this screen had no navigation at all: the only ways out were its own
 // Save and Cancel buttons, so a reload landed the user somewhere with no rail.
@@ -19,6 +20,7 @@ import NavSidebar from '../layout/NavSidebar';
 const BIO_MAX_LENGTH = 200;
 
 const EditProfile = () => {
+  const { refreshUser } = useContext(AuthContext);
   const navigate = useNavigate();
   const [bio, setBio] = useState('');
   const [username, setUsername] = useState('');
@@ -28,6 +30,19 @@ const EditProfile = () => {
   // most misleading of this screen's failures because it looked like it worked.
   const [avatar, setAvatar] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
+  // The other half of #104's story. Picking a file works; **taking the picture
+  // away had no control at all**, in any of the three screens that edit one.
+  // `ProfileSerializer.avatar` is `allow_null=True` and its hand-written
+  // `update()` has always written a `None` through, so the API has accepted
+  // this for as long as it has accepted an upload — there was simply no way to
+  // ask for it. A file input cannot express it: it says "unchanged" or "here is
+  // a file", and never "none".
+  //
+  // A separate flag rather than a sentinel in `avatar`, because the two cannot
+  // travel together. `lib/multipart.js` promotes a body carrying a `File` to
+  // `FormData` and drops `null`s out of it — sending both would silently lose
+  // the removal and store the file.
+  const [dropAvatar, setDropAvatar] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
@@ -64,6 +79,16 @@ const EditProfile = () => {
     previewRef.current = file ? URL.createObjectURL(file) : null;
     setAvatar(file);
     setAvatarUrl(previewRef.current ?? avatarUrl);
+    // Choosing a picture is choosing to have one.
+    if (file) setDropAvatar(false);
+  };
+
+  const handleAvatarRemove = () => {
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    previewRef.current = null;
+    setAvatar(null);
+    setAvatarUrl(null);
+    setDropAvatar(true);
   };
 
   const handleSubmit = async (e) => {
@@ -73,9 +98,20 @@ const EditProfile = () => {
 
     try {
       const fields = { bio, username };
-      const saved = await updateMyProfile(avatar ? { ...fields, avatar } : fields);
+      // Three cases and not two: a `File`, an explicit `null`, or the key left
+      // out entirely so the stored image is untouched.
+      const saved = await updateMyProfile(
+        avatar ? { ...fields, avatar } : dropAvatar ? { ...fields, avatar: null } : fields,
+      );
       setAvatarUrl(saved.avatar);
+      setAvatar(null);
+      setDropAvatar(false);
       setUsername(saved.username);
+      // The copy in `AuthContext` is read once on mount and by nothing else, so
+      // without this every screen that greets you by name kept the old one until
+      // a reload. The socket announces the change to *other* people; this is the
+      // one client that already knows and still had to be told.
+      await refreshUser?.();
       setFeedback({ type: 'success', message: 'Profile updated successfully!' });
       setTimeout(() => {
         navigate('/profile');
@@ -122,7 +158,21 @@ const EditProfile = () => {
                   onChange={handleAvatarChange}
                   className="min-w-0 text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700 cursor-pointer"
                 />
+                {(avatarUrl || avatar) && (
+                  <button
+                    type="button"
+                    onClick={handleAvatarRemove}
+                    className="shrink-0 text-xs text-rose-400 hover:text-rose-300 underline cursor-pointer"
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
+              {dropAvatar && (
+                <p className="text-xs text-amber-400 mt-2">
+                  Your picture will be removed when you save.
+                </p>
+              )}
             </div>
 
             {/* #130 — the serializer has written this since A-02 and no screen

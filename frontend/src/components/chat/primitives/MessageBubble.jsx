@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Avatar from './Avatar';
+import usePresence from '../../../hooks/usePresence';
 import Timestamp from './Timestamp';
 import { fileNameOf, humanSize } from '../../../services/media';
 
@@ -96,6 +97,7 @@ export default function MessageBubble({
   const [busy, setBusy] = useState(false);
 
   const author = message.sender?.username ?? 'unknown';
+  const { isOnline } = usePresence();
 
   const startEditing = () => {
     setDraft(message.text ?? '');
@@ -127,7 +129,12 @@ export default function MessageBubble({
 
   return (
     <div className={`flex gap-3 ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
-      <Avatar name={author} size="sm" />
+      <Avatar
+        name={author}
+        src={message.sender?.avatar}
+        online={message.sender?.id ? isOnline(message.sender.id) : undefined}
+        size="sm"
+      />
 
       <div className={`flex flex-col min-w-0 max-w-[min(32rem,80%)] ${isOwn ? 'items-end' : 'items-start'}`}>
         <div className="flex items-baseline gap-2 mb-1">

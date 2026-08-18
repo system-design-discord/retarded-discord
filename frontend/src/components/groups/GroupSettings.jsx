@@ -7,6 +7,7 @@ import readApiError from '../../lib/apiError';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
 import { Avatar, useConfirm } from '../chat/primitives';
+import usePresence from '../../hooks/usePresence';
 import AvatarField from '../common/AvatarField';
 
 // U-10 — US-5.2 and US-6.4. `M-05` delivered both server-side in Sprint 2 and
@@ -33,6 +34,7 @@ import AvatarField from '../common/AvatarField';
 // user_stories_en.tex §Assumptions actually reserves.
 
 export default function GroupSettings() {
+  const { isOnline } = usePresence();
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
@@ -49,6 +51,7 @@ export default function GroupSettings() {
     addMember,
     removeMember,
     remove,
+    gone,
   } = useGroup(groupId);
 
   const [name, setName] = useState('');
@@ -56,6 +59,10 @@ export default function GroupSettings() {
   // A-3 — the picked file, held here rather than in `AvatarField`, because
   // `dirty` below has to count it.
   const [avatar, setAvatar] = useState(null);
+  // ...and the third state: the image is to be taken away. Separate from
+  // `avatar` because a `File` and a `null` cannot travel in the same request —
+  // see `AvatarField`.
+  const [dropAvatar, setDropAvatar] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -82,6 +89,7 @@ export default function GroupSettings() {
     setName(group?.name ?? '');
     setDescription(group?.description ?? '');
     setAvatar(null);
+    setDropAvatar(false);
   }, [group]);
 
   // A picked file counts. Leave it out and the Save button stays disabled with
@@ -89,7 +97,10 @@ export default function GroupSettings() {
   // store nothing (#104).
   const dirty =
     group &&
-    (name !== (group.name ?? '') || description !== (group.description ?? '') || Boolean(avatar));
+    (name !== (group.name ?? '') ||
+      description !== (group.description ?? '') ||
+      Boolean(avatar) ||
+      dropAvatar);
 
   const save = async (event) => {
     event.preventDefault();
@@ -98,10 +109,24 @@ export default function GroupSettings() {
     setSaving(true);
     setSaved(false);
     const fields = { name: name.trim(), description: description.trim() };
-    const failure = await update(avatar ? { ...fields, avatar } : fields);
+    // Three cases, not two. A picked `File` promotes the request to multipart
+    // (`lib/multipart.js`); an explicit `null` stays JSON and is what clears the
+    // column, which is why the two can never be sent together. Sending neither
+    // leaves the stored image alone — `ModelSerializer.update` only touches the
+    // keys it was given.
+    const failure = await update(
+      avatar ? { ...fields, avatar } : dropAvatar ? { ...fields, avatar: null } : fields,
+    );
     setSaving(false);
     setSaved(!failure);
   };
+
+  // Any member may delete the group, so a member sitting on this screen can
+  // have it deleted under them. `destroy` below navigates for the member who
+  // pressed the button; this is for everybody else.
+  useEffect(() => {
+    if (gone) navigate('/groups', { replace: true });
+  }, [gone, navigate]);
 
   const search = async (event) => {
     event.preventDefault();
@@ -135,7 +160,7 @@ export default function GroupSettings() {
     const confirmed = await confirm({
       title: isSelf ? `Remove yourself from ${group.name}?` : `Remove ${member.username}?`,
       body: isSelf
-        ? 'The API refuses this for the admin — there is no way to leave a group yet.'
+        ? `You lose access to ${group.name} and every message in it. The admin cannot do this — somebody has to hold the membership list.`
         : `They lose access to ${group.name} and every message in it.`,
       confirmLabel: 'Remove',
     });
@@ -224,18 +249,21 @@ export default function GroupSettings() {
 
       <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto">
         <div className="max-w-3xl mx-auto space-y-6">
-          <div className="min-w-0">
-            <Link
-              to={`/groups/${groupId}/chat`}
-              className="text-[11px] text-slate-500 hover:text-slate-300 transition"
-            >
-              ← Back to the conversation
-            </Link>
-            <h1 className="text-2xl font-extrabold text-white truncate mt-1">{group.name}</h1>
-            <p className="text-slate-400 text-sm mt-1 truncate">
-              {members.length} {members.length === 1 ? 'member' : 'members'}
-              {admin && <> · admin @{admin.username}</>}
-            </p>
+          <div className="min-w-0 flex items-start gap-4">
+            <Avatar name={group.name} src={group.avatar} alt={group.name} size="lg" className="mt-3" />
+            <div className="min-w-0">
+              <Link
+                to={`/groups/${groupId}/chat`}
+                className="text-[11px] text-slate-500 hover:text-slate-300 transition"
+              >
+                ← Back to the conversation
+              </Link>
+              <h1 className="text-2xl font-extrabold text-white truncate mt-1">{group.name}</h1>
+              <p className="text-slate-400 text-sm mt-1 truncate">
+                {members.length} {members.length === 1 ? 'member' : 'members'}
+                {admin && <> · admin @{admin.username}</>}
+              </p>
+            </div>
           </div>
 
           {error && (
@@ -294,8 +322,16 @@ export default function GroupSettings() {
                 label="Image"
                 currentUrl={group.avatar}
                 file={avatar}
-                onPick={setAvatar}
-                hint="Any member can change the group's image."
+                onPick={(picked) => {
+                  setAvatar(picked);
+                  if (picked) setDropAvatar(false);
+                }}
+                onRemove={(next) => {
+                  setDropAvatar(next);
+                  if (next) setAvatar(null);
+                }}
+                removed={dropAvatar}
+                hint="Any member can change or remove the group's image."
               />
 
               <div className="flex items-center gap-3">
@@ -320,7 +356,12 @@ export default function GroupSettings() {
                   key={member.id}
                   className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800/40 transition"
                 >
-                  <Avatar name={member.username} size="sm" />
+                  <Avatar
+                    name={member.username}
+                    src={member.avatar}
+                    online={isOnline(member.id)}
+                    size="sm"
+                  />
                   <div className="flex-1 min-w-0">
                     {/* A-4 — US-10.2's whole justification is "so that I can
                         better identify my contacts", and until this the only
@@ -370,8 +411,8 @@ export default function GroupSettings() {
             {!isAdmin && (
               <p className="text-xs text-slate-500">
                 Adding and removing members is the admin's, and it is the only thing here that is —
-                the group's information and the group itself are yours to change like anyone else's.
-                There is no way to leave a group yet; the API has no endpoint for it.
+                the group's information and the group itself are yours to change like anyone else's,
+                and so is taking yourself out of it, in the danger zone below.
               </p>
             )}
           </section>
@@ -406,7 +447,12 @@ export default function GroupSettings() {
                     key={candidate.id}
                     className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-800/60 transition"
                   >
-                    <Avatar name={candidate.username} size="sm" />
+                    <Avatar
+                      name={candidate.username}
+                      src={candidate.avatar}
+                      online={isOnline(candidate.id)}
+                      size="sm"
+                    />
                     <span className="flex-1 min-w-0 text-sm text-slate-300 truncate">
                       {candidate.username}
                     </span>

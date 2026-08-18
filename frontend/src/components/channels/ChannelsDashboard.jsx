@@ -1,9 +1,8 @@
-import { useContext, useState } from 'react';
+import { useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import useChannels from '../../hooks/useChannels';
-import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
-import { EmptyState, useConfirm } from '../chat/primitives';
+import { Avatar, EmptyState, useConfirm } from '../chat/primitives';
 import CreateChannelModal from './CreateChannelModal';
 
 // F-04 — US-4.1. The channels a user belongs to, and the way into each one.
@@ -23,7 +22,6 @@ import CreateChannelModal from './CreateChannelModal';
 // copy of a rule that already has a test.
 
 export default function ChannelsDashboard() {
-  const { user } = useContext(AuthContext);
   const { channels, loading, error, setError, create, remove } = useChannels();
   const [creating, setCreating] = useState(false);
   const [deleted, setDeleted] = useState(null);
@@ -41,13 +39,20 @@ export default function ChannelsDashboard() {
     return <Navigate to={`/channels/${stale}${topic ? `?topic=${topic}` : ''}`} replace />;
   }
 
-  // The owner is the one person guaranteed to hold `can_delete_channel` — it is
-  // implicit and cannot be revoked by editing a role — and the list response
-  // already names them, so the control costs no per-channel permission read.
-  // A role holder who also holds it sees no button here and deletes from the
-  // channel view instead; hiding a control is a courtesy, and the server
-  // refuses either way.
-  const owns = (channel) => channel.owner?.id === user?.id;
+  // **`architecture.tex` §5.1 applies to the client too.** This used to be
+  // `channel.owner?.id === user?.id`, with a comment claiming a role holder who
+  // also held `can_delete_channel` "deletes from the channel view instead".
+  // There is no delete in the channel view and there never was, so the whole of
+  // the product's `can_delete_channel` was a checkbox in the role manager that
+  // granted a power with no control anywhere: the API allowed it, the role
+  // screen offered it, and the holder could not find it.
+  //
+  // The answer comes from `roles.permissions_for` now, rendered onto every row
+  // by `ChannelSerializer.my_permissions`, so the list asks the same authority
+  // `/channels/<id>/me/permissions/` asks and the SPA compares no ids. Hiding
+  // the control is still only a courtesy — `ChannelDetailView` refuses a DELETE
+  // without the permission whatever this draws.
+  const mayDelete = (channel) => Boolean(channel.my_permissions?.can_delete_channel);
 
   const confirmDelete = async (channel) => {
     // #139 — the same cascade sentence, in the app's own dialog rather than the
@@ -136,20 +141,31 @@ export default function ChannelsDashboard() {
                   className="bg-slate-900 border border-slate-800/80 hover:border-indigo-500/50 rounded-2xl transition"
                 >
                   <div className="flex items-start justify-between gap-4 p-5 pb-3">
-                    <Link to={`/channels/${channel.id}`} className="min-w-0 group">
-                      <h2 className="text-base font-bold text-slate-200 group-hover:text-indigo-400 transition truncate">
-                        # {channel.name}
-                      </h2>
-                      <p className="text-xs text-slate-400 mt-1 truncate">
-                        {channel.description || 'No description.'}
-                      </p>
+                    <Link
+                      to={`/channels/${channel.id}`}
+                      className="min-w-0 group flex items-start gap-3"
+                    >
+                      <Avatar
+                        name={channel.name}
+                        src={channel.avatar}
+                        alt={channel.name}
+                        size="lg"
+                      />
+                      <span className="min-w-0">
+                        <h2 className="text-base font-bold text-slate-200 group-hover:text-indigo-400 transition truncate">
+                          # {channel.name}
+                        </h2>
+                        <p className="text-xs text-slate-400 mt-1 truncate">
+                          {channel.description || 'No description.'}
+                        </p>
+                      </span>
                     </Link>
 
                     <div className="shrink-0 flex items-center gap-3">
                       <span className="text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-full">
                         {channel.member_count} {channel.member_count === 1 ? 'member' : 'members'}
                       </span>
-                      {owns(channel) && (
+                      {mayDelete(channel) && (
                         <button
                           type="button"
                           onClick={() => confirmDelete(channel)}

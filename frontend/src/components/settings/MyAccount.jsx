@@ -17,7 +17,7 @@ import SettingsTabs from './SettingsTabs';
 // implementation.
 
 const MyAccount = () => {
-  const { logout } = useContext(AuthContext);
+  const { logout, refreshUser } = useContext(AuthContext);
   const navigate = useNavigate();
 
   // US-1.3 — the only place in the app a user can actually log out. The context
@@ -56,6 +56,9 @@ const MyAccount = () => {
     try {
       const saved = await updateMyProfile(accountInfo);
       setAccountInfo({ username: saved.username, email: saved.email });
+      // Same reason as `EditProfile`: this screen can change the username, and
+      // the copy every other screen greets you with lives in `AuthContext`.
+      await refreshUser?.();
       setFeedback({ type: 'success', message: 'Account details updated successfully.' });
     } catch (err) {
       // Catch and display specific validation errors from the API (Acceptance Criteria).

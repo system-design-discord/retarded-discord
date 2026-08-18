@@ -23,10 +23,10 @@ wiring, not by new endpoints — every one of those was already written and test
 | `hooks/useChannelPermissions.js` | `me/permissions/` — `isOwner`, `can(key)` |
 | `hooks/useChannelRoles.js` | the roles and members of one channel, and the six writes |
 | `lib/permissions.js` | the eight permission keys, in `roles.models.PERMISSION_FIELDS` order |
-| `ChannelsDashboard.jsx` | `/channels` — the list, create, owner-gated delete |
+| `ChannelsDashboard.jsx` | `/channels` — the list, create, delete gated on `my_permissions.can_delete_channel` |
 | `ChannelView.jsx` | `/channels/:channelId` — topic tabs, the conversation, the member aside |
 | `RoleManager.jsx` | `/channels/:channelId/roles` — the eight toggles, role assignment, add and remove members |
-| `ChannelSettings.jsx` | `/channels/:channelId/settings` — name, description, the media default |
+| `ChannelSettings.jsx` | `/channels/:channelId/settings` — name, description, avatar, the media default, and Leave |
 | `CreateChannelModal.jsx` | name and description; the dashboard owns the call |
 
 `ChannelView.jsx` renders `chat/Chat.jsx` with `kind="topic"`. **It is the fourth caller of that
@@ -39,16 +39,50 @@ draws: an Overview block with the name and the description, and a Permission Def
 media restriction — which used to live on the role manager, because `A-10` had no settings screen to
 put it on. It is a property of the channel rather than of a role, so it moved.
 
-Two things that screen deliberately does not have. **Deleting the channel** stays on
+One thing that screen deliberately does not have. **Deleting the channel** stays on
 `ChannelsDashboard.jsx`, which already confirms it and reports the cascade `C-03` answers with; a
-second call site for the same destructive act is how two of them drift apart. **The channel avatar**
-is the third field `ChannelSerializer` accepts and the one nothing edits — it is a file upload rather
-than a text field, `#104` is the cautionary tale about wiring one of those halfway, and US-4.7 and
-US-6.1 are satisfied without it.
+second call site for the same destructive act is how two of them drift apart.
+
+**The channel avatar is edited here**, through the same `AvatarField` the profile screen uses, and
+the Remove control beside it clears the column by sending `avatar: null`. That is not a multipart
+send: `lib/multipart.js#toRequestBody` builds a `FormData` only when the body carries a `File`, and
+`FormData` drops a `null`. A picked file and a removal therefore cannot travel together, which is
+why the two controls are mutually exclusive rather than merely tidy.
+
+**The settings route is open to every member**, not to `can_edit_channel` holders. It is the only
+screen with a Leave control, and gating the link on the edit permission left a plain member with no
+route out of a channel they had been added to — the API had allowed it since `A-10`, when
+`roles.services.may_remove_channel_member` started granting `actor == target`. A member without the
+permission sees the notice explaining what they cannot change, and the Leave block below it.
 
 There is no channel picker any more. `F-06` shipped one because the dashboard that would link to its
 screen was `F-04` and had not landed; `F-04` landed, the channel view links to the role manager from
 the channel it governs, and the picker and its `/channels/roles` route are gone.
+
+## Structural changes arrive over the socket
+
+`useChannels` and `useChannel` used to re-read on mount and never again, which is why a topic
+renamed or a channel deleted by somebody else only appeared after leaving the screen and coming
+back. Both now watch `usePresence().structure`, a counter of `structure.changed` frames off the
+notification socket (`backend/realtime/README.md` has the frame).
+
+The two hooks watch it differently, on purpose:
+
+* `useChannels` holds a **list**, and any structural frame at all can change which rows belong in
+  it — including one about a channel it has never heard of, which is exactly the "added to a new
+  channel" case. It re-reads on every bump, quietly: `refresh({ quiet: true })` leaves `loading`
+  alone so a live update never blanks the list under the reader.
+* `useChannel` holds **one** channel, so it matches first — `scope === 'channel' && id === mine`, or
+  `scope === 'topic' && channel_id === mine` — and ignores everything else. When the frame says this
+  channel was deleted there is nothing to re-read, so it sets `gone` and `ChannelView` navigates to
+  `/channels`. Re-reading would answer 404 and draw an error screen for something that is not an
+  error.
+
+A deleted **topic** needs no special case in the view: `ChannelView` already picks
+`topics.find(matching the query string) ?? topics[0]`, so once the refreshed channel no longer lists
+it, the reader lands on the first remaining tab. What it does fix is the post that used to follow —
+a stale tab posting to a vanished topic died on DRF's `Invalid pk "7" - object does not exist.`,
+which `messaging` now answers with `common.messages.MESSAGE_TARGET_GONE` instead.
 
 ## The API shapes that bite
 

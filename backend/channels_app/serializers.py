@@ -11,6 +11,10 @@ from accounts.serializers import PublicUserSerializer
 from common import messages
 from common.signed_media import SignedImageField
 
+# `roles.services` reaches `channels_app.models`, never this module, so the
+# import is one-directional and safe at module scope.
+from roles import services as roles
+
 from .models import Channel, ChannelMember, Topic
 
 
@@ -61,14 +65,44 @@ class ChannelSerializer(serializers.ModelSerializer):
     avatar = SignedImageField(required=False, allow_null=True)
     topics = TopicSerializer(many=True, read_only=True)
     member_count = serializers.IntegerField(source='memberships.count', read_only=True)
+    my_permissions = serializers.SerializerMethodField()
 
     class Meta:
         model = Channel
         fields = [
             'id', 'owner', 'name', 'description', 'avatar',
             'media_restricted', 'created_at', 'member_count', 'topics',
+            'my_permissions',
         ]
-        read_only_fields = ['id', 'owner', 'created_at', 'member_count', 'topics']
+        read_only_fields = [
+            'id', 'owner', 'created_at', 'member_count', 'topics', 'my_permissions',
+        ]
+
+    def get_my_permissions(self, obj):
+        """What the caller may do here — `roles.permissions_for`, unchanged.
+
+        **This exists so the SPA stops deciding for itself.** The channel list
+        drew its Delete button from `channel.owner.id === user.id`, which is the
+        one comparison `architecture.tex` §5.1 forbids: it is the client
+        answering a permission question, and it answered it wrong — the owner is
+        *a* holder of `can_delete_channel`, not the only one, so a member granted
+        the permission by a role saw no control anywhere in the product.
+
+        `/api/channels/<id>/me/permissions/` already answers this for one
+        channel and stays where it is; a list of channels cannot afford a
+        request each. The dict is the same eight keys from the same function, so
+        there is one definition of the answer and two ways to ask for it.
+
+        Anonymous or contextless — a serializer used outside a request, as the
+        structural events do — gets `None` rather than a fabricated set of
+        denials, because "I was not asked" and "you may do nothing" are
+        different facts and a client should not have to guess which it got.
+        """
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user is None or not user.is_authenticated:
+            return None
+        return roles.permissions_for(user, obj)
 
     def validate_name(self, value):
         name = value.strip()

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import CreateGroupModal from './CreateGroupModal';
 import useGroups from '../../hooks/useGroups';
-import { EmptyState } from '../chat/primitives';
+import { Avatar, EmptyState } from '../chat/primitives';
 import NavSidebar from '../layout/NavSidebar';
 
 // US-5.1 — the groups you belong to, and the way into each one.
@@ -75,14 +75,21 @@ export default function GroupsDashboard() {
                     <button
                       type="button"
                       onClick={() => navigate(`/groups/${group.id}/chat`)}
-                      className="flex-1 min-w-0 text-left cursor-pointer"
+                      className="flex-1 min-w-0 text-left cursor-pointer flex items-start gap-3"
                     >
-                      <h3 className="text-base font-bold text-slate-200 group-hover:text-indigo-400 transition truncate">
-                        {group.name}
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-1 truncate">
-                        {group.description || 'No description.'}
-                      </p>
+                      {/* A-3's other half: `Group.avatar` has been uploadable
+                          from the settings screen and drawn nowhere else, so a
+                          group with a picture and one without looked identical
+                          on the only screen that lists them. */}
+                      <Avatar name={group.name} src={group.avatar} alt={group.name} size="lg" />
+                      <span className="min-w-0">
+                        <h3 className="text-base font-bold text-slate-200 group-hover:text-indigo-400 transition truncate">
+                          {group.name}
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-1 truncate">
+                          {group.description || 'No description.'}
+                        </p>
+                      </span>
                     </button>
 
                     <div className="flex items-center gap-3 shrink-0">

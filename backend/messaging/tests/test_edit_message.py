@@ -199,3 +199,80 @@ def test_an_empty_edit_is_rejected(auth_client, user, other_user):
     assert response.status_code == 400
     message.refresh_from_db()
     assert message.text == 'hello'
+
+
+# ------------------------------------------------ the edit is announced (#RT)
+
+def _capture(event):
+    """Subscribe a recorder to one event and hand back its list.
+
+    `conftest.isolated_event_subscribers` restores the registry afterwards, so
+    this does not leak into the next test.
+    """
+    from common import events
+
+    seen = []
+    events.subscribe(event, lambda **payload: seen.append(payload))
+    return seen
+
+
+@pytest.mark.django_db
+def test_editing_announces_the_change_on_the_seam(auth_client, user, other_user):
+    """The defect behind "the edit does not show for the other person".
+
+    `perform_update` used to save and return. Nothing was published, so the
+    gateway had nothing to fan out and the other end only ever caught up on
+    `useConversation`'s fallback poll — which backs off to thirty seconds
+    exactly when the socket *is* connected.
+
+    Asserted at the seam rather than at the socket because that is the boundary
+    this module owns: `messaging` may not import `realtime`, and
+    `realtime/tests/test_gateway.py` covers the other side of the same event.
+    """
+    from common import events
+
+    message = Message.objects.create(sender=user, recipient=other_user, text='typo')
+    seen = _capture(events.MESSAGE_UPDATED)
+
+    response = auth_client(user).patch(url(message), {'text': 'fixed'}, format='json')
+
+    assert response.status_code == 200
+    assert len(seen) == 1
+    # The saved row, not the one that was passed in — the announcement has to
+    # carry the new text or a subscriber would fan out the old one.
+    assert seen[0]['message'].pk == message.pk
+    assert seen[0]['message'].text == 'fixed'
+    assert seen[0]['message'].is_edited is True
+
+
+@pytest.mark.django_db
+def test_a_refused_edit_announces_nothing(auth_client, other_user, user):
+    """The publish sits after `require_edit_message`, so a 403 is silent."""
+    from common import events
+
+    message = Message.objects.create(sender=user, recipient=other_user, text='mine')
+    seen = _capture(events.MESSAGE_UPDATED)
+
+    response = auth_client(other_user).patch(url(message), {'text': 'yours'}, format='json')
+
+    assert response.status_code == 403
+    assert seen == []
+
+
+@pytest.mark.django_db
+def test_a_failing_subscriber_does_not_fail_the_edit(auth_client, user, other_user):
+    """`events.publish` logs and swallows, so a Redis outage costs the live
+    push and nothing else — the edit is already committed."""
+    from common import events
+
+    def explode(**_):
+        raise RuntimeError('the gateway is down')
+
+    events.subscribe(events.MESSAGE_UPDATED, explode)
+    message = Message.objects.create(sender=user, recipient=other_user, text='typo')
+
+    response = auth_client(user).patch(url(message), {'text': 'fixed'}, format='json')
+
+    assert response.status_code == 200
+    message.refresh_from_db()
+    assert message.text == 'fixed'

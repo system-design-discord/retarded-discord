@@ -13,8 +13,8 @@ somebody writes another one, `F-00` has been undone. Add a prop instead.
 
 | | |
 |---|---|
-| `Chat.jsx` | The conversation view. Takes a target (`kind` + `id`) and a little chrome — title, subtitle, an aside, a header slot — and renders it. Knows nothing about which kind it is showing. |
-| `primitives/Avatar.jsx` | Initial circle, sized by prop. |
+| `Chat.jsx` | The conversation view. Takes a target (`kind` + `id`) and a little chrome — title, an optional `avatar` drawn beside it, subtitle, an aside, a header slot — and renders it. Knows nothing about which kind it is showing; the `avatar` is passed no `online` prop, because a group is not a person. |
+| `primitives/Avatar.jsx` | The face. An `<img>` when given a `src`, the initial when not or when the image fails to load — signed media URLs expire, and a dead token must look like no avatar rather than like a bug. An optional `online` prop draws the presence dot, so seven call sites got it without seven dots. |
 | `primitives/Timestamp.jsx` | The single date-formatting rule: a clock time today, a date as well when older. |
 | `primitives/MessageBubble.jsx` | Author, time, text, the `(edited)` marker, the attachment rendered as its own kind, and the inline edit form. |
 | `primitives/MessageList.jsx` | The scroll container and the three states a list actually has — loading, empty, populated. |
@@ -199,3 +199,34 @@ every message twice: the socket frame consistently beats the POST response back,
 first and found nothing to dedupe against. `send` hands its row to `receive` now, which is what makes
 "one merge rule" checkable rather than remembered. The blind append also bypassed the sort, so a
 message written while an older frame was still in flight sorted wrongly as well.
+
+### Edits and deletions travel too
+
+`message.updated` and `message.deleted` are the other two frames, and they are the fix for *"the
+edit does not show for the other person until they refresh"*. `MessageDetailView` published nothing
+on update or delete, so the gateway had nothing to fan out and the only thing that ever corrected the
+other screen was the fallback poll above — which backs off to **thirty seconds precisely while the
+socket is connected**. That is why it read as "never" rather than as "slow".
+
+`useConversation` applies them with two reducers beside `receive`, and the separation is the point:
+
+* `applyUpdate` **replaces by id and does nothing when the id is absent.** An edit is not an arrival,
+  and inserting a message this client never loaded would drop a row from the middle of the history at
+  the bottom of the screen.
+* `applyRemoval` filters it out.
+
+**`receive` stays insert-if-absent.** Making it a general upsert would serve all three frames with
+one function and would bring #137's doubled message straight back, because the dedupe *is* the fix.
+
+`edit` and `remove` keep writing to local state optimistically; the socket echo that follows is
+idempotent against both, so the author sees no flicker and the other end sees no delay.
+
+### Closing on `pagehide`
+
+`openSocket` registers a `pagehide` handler that closes the connection, and it is not a tidy-up.
+**React does not run effect cleanups when the document is destroyed** — a full page load, a typed
+URL, a closed tab — so `return () => socket.close()` never fires there and the socket is left for the
+browser to reap whenever it likes. Four page loads in one tab measured as four connections still open
+on the server, all of them until the browser exited. Nothing depended on that until presence did, and
+then it was the whole bug: logging out closed the socket the current page had opened while every
+socket the earlier pages left behind kept the user marked online.

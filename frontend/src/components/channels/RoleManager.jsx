@@ -12,6 +12,7 @@ import { getChannel } from '../../services/channels';
 import { searchUsers } from '../../services/users';
 import NavSidebar from '../layout/NavSidebar';
 import { Avatar, EmptyState, useConfirm } from '../chat/primitives';
+import usePresence from '../../hooks/usePresence';
 
 // F-06 — US-4.2, US-8.1, US-8.2, US-8.3.
 //
@@ -49,14 +50,28 @@ import { Avatar, EmptyState, useConfirm } from '../chat/primitives';
 // `can_add_member` for the picker, `can_remove_member` for the Remove buttons —
 // so the screen is no longer all-or-nothing on the first of them.
 
-function PermissionGrid({ role, heldByActor, disabled, onToggle }) {
+function PermissionGrid({ role, heldByActor, disabled, onToggle, channelId, mediaRestricted }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 mt-3">
-      {PERMISSIONS.map(({ key, label, hint }) => {
+      {PERMISSIONS.map(({ key, label, hint, conditionalOn }) => {
         // You cannot grant what you do not hold (US-8.2). Revoking is always
         // allowed — taking away less than you have is never an escalation.
         const wouldGrant = !role[key];
         const refused = wouldGrant && !heldByActor[key];
+
+        // **`can_send_media` is not a rule on its own** and this screen used to
+        // imply it was. `roles.services.may_send_media` composes it with
+        // `Channel.media_restricted`: an unrestricted channel lets every member
+        // send media with no role at all, so clearing this box on a channel
+        // whose switch is off refuses nobody. That is the documented behaviour;
+        // what was missing was the screen saying so, and an admin who cleared
+        // it and watched the member keep attaching files reasonably read the
+        // silence as a bug.
+        //
+        // The checkbox stays **editable**. The column is real and setting it up
+        // before flipping the channel switch is a legitimate order to work in;
+        // disabling it would trade one wrong impression for another.
+        const dormant = conditionalOn === 'media_restricted' && !mediaRestricted;
 
         return (
           <label
@@ -81,6 +96,19 @@ function PermissionGrid({ role, heldByActor, disabled, onToggle }) {
                   that the eight toggles map one-to-one onto the model
                   booleans, and this is how that is demonstrated. */}
               <code className="block text-[10px] text-slate-600">{key}</code>
+              {dormant && (
+                <span className="block mt-1 text-[10px] leading-snug text-amber-400/90">
+                  Not in effect — this channel does not restrict media, so every
+                  member may send it whatever this says.{' '}
+                  <Link
+                    to={`/channels/${channelId}/settings`}
+                    className="underline hover:text-amber-300"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    Channel settings
+                  </Link>
+                </span>
+              )}
             </span>
           </label>
         );
@@ -89,7 +117,16 @@ function PermissionGrid({ role, heldByActor, disabled, onToggle }) {
   );
 }
 
-function RoleCard({ role, heldByActor, busy, onToggle, onRename, onDelete }) {
+function RoleCard({
+  role,
+  heldByActor,
+  busy,
+  onToggle,
+  onRename,
+  onDelete,
+  channelId,
+  mediaRestricted,
+}) {
   const [name, setName] = useState(role.name);
   const [renaming, setRenaming] = useState(false);
 
@@ -160,12 +197,20 @@ function RoleCard({ role, heldByActor, busy, onToggle, onRename, onDelete }) {
         )}
       </div>
 
-      <PermissionGrid role={role} heldByActor={heldByActor} disabled={busy} onToggle={onToggle} />
+      <PermissionGrid
+        role={role}
+        heldByActor={heldByActor}
+        disabled={busy}
+        onToggle={onToggle}
+        channelId={channelId}
+        mediaRestricted={mediaRestricted}
+      />
     </li>
   );
 }
 
 export default function RoleManager() {
+  const { isOnline } = usePresence();
   const { channelId } = useParams();
 
   const {
@@ -402,6 +447,8 @@ export default function RoleManager() {
                       onToggle={(key, value) => run(() => update(role.id, { [key]: value }))}
                       onRename={(name) => run(() => update(role.id, { name }))}
                       onDelete={() => run(() => remove(role.id))}
+                      channelId={channelId}
+                      mediaRestricted={Boolean(channel?.media_restricted)}
                     />
                   ))}
                 </ul>
@@ -424,7 +471,12 @@ export default function RoleManager() {
                         key={member.id}
                         className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900 px-4 py-3"
                       >
-                        <Avatar name={member.user.username} size="sm" />
+                        <Avatar
+                          name={member.user.username}
+                          src={member.user.avatar}
+                          online={isOnline(member.user.id)}
+                          size="sm"
+                        />
                         <span className="min-w-0 flex-1">
                           {/* A-4 — the third member list that named a person
                             and offered no way to look them up. */}
@@ -519,7 +571,12 @@ export default function RoleManager() {
                         key={candidate.id}
                         className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-800/60 transition"
                       >
-                        <Avatar name={candidate.username} size="sm" />
+                        <Avatar
+                          name={candidate.username}
+                          src={candidate.avatar}
+                          online={isOnline(candidate.id)}
+                          size="sm"
+                        />
                         <span className="flex-1 min-w-0 text-sm text-slate-300 truncate">
                           {candidate.username}
                         </span>

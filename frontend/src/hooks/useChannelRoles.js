@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import usePresence from './usePresence';
 import {
   addMember as addMemberRequest,
   assignRole,
@@ -39,6 +40,8 @@ import {
 // the channel.
 
 export default function useChannelRoles(channelId, { enabled = true } = {}) {
+  const { profileVersion } = usePresence();
+
   const [roles, setRoles] = useState([]);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -67,9 +70,11 @@ export default function useChannelRoles(channelId, { enabled = true } = {}) {
     }
   }, [channelId, enabled]);
 
+  // See `useGroup` — the member rows carry nested users, so a rename or a
+  // new avatar anywhere means this read is stale.
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, profileVersion]);
 
   // Every write returns the server's error text rather than throwing, because
   // the interesting failures here are deliberate refusals with a message worth

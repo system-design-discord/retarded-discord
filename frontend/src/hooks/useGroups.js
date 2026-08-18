@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createGroup, deleteGroup, listGroups } from '../services/groups';
 import { readApiError } from '../lib/apiError';
+import usePresence from './usePresence';
 
 // The caller's groups, and the two writes the dashboard makes against them.
 // The mirror of `useChannels.js`, and the same rule: **state only ever moves to
@@ -16,27 +17,40 @@ import { readApiError } from '../lib/apiError';
 // "Only groups you belong to" is not decided here either:
 // `GroupListCreateView.get_queryset` filters on membership, and a UI filter on
 // top would be a second, weaker copy of it.
+//
+// **It re-reads on `structure.version`**, exactly as `useChannels` does and for
+// the same reason: a group somebody else deleted has to leave this list, and a
+// group somebody just added you to has to join it, without a reload.
 
 export default function useGroups() {
+  const { structure } = usePresence();
+
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  // `quiet` for the re-reads nobody asked for — see `useChannels.js`.
+  const refresh = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true);
     try {
       setGroups(await listGroups());
       setError('');
     } catch (caught) {
-      setError(readApiError(caught, 'Your groups could not be loaded.'));
+      if (!quiet) setError(readApiError(caught, 'Your groups could not be loaded.'));
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!structure.version) return;
+    refresh({ quiet: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [structure.version]);
 
   /**
    * US-5.1 — create a group and become its admin.

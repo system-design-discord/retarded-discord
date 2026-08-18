@@ -18,8 +18,30 @@ import { useEffect, useState } from 'react';
  * The parent owns the picked `File` because the parent owns the form — it needs
  * it in its `dirty` calculation, or the Save button stays disabled and the
  * screen looks like it worked while storing nothing, which is #104 exactly.
+ *
+ * **Removing an image is a third state, not the absence of the second.** Every
+ * `avatar` in the product is `allow_null=True` and the API has always cleared
+ * the column for a `null`, but there was no way to say `null` from any screen:
+ * a file input can be *left alone* or *given a file*, and "take the picture
+ * away" is neither. So a picked file and a pending removal are two separate
+ * signals to the parent, `onPick` and `onRemove`, and they are mutually
+ * exclusive here — picking a file cancels a pending removal, because sending
+ * both would mean sending a `FormData`, and `lib/multipart.js` drops a `null`
+ * out of a `FormData` rather than sending the string "null". The removal would
+ * vanish silently and the file would win.
  */
-export default function AvatarField({ id, label, currentUrl, file, onPick, hint }) {
+export default function AvatarField({
+  id,
+  label,
+  currentUrl,
+  file,
+  onPick,
+  // Optional: a screen with nothing to remove — a brand-new group, say — simply
+  // does not pass it, and no control is drawn.
+  onRemove,
+  removed = false,
+  hint,
+}) {
   const [preview, setPreview] = useState(null);
 
   useEffect(() => {
@@ -32,7 +54,11 @@ export default function AvatarField({ id, label, currentUrl, file, onPick, hint 
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  const shown = preview ?? currentUrl;
+  // A pending removal shows the empty square straight away. Waiting for the
+  // save to answer would leave the picture on screen after the click, which
+  // reads as "that did nothing" — the same complaint #104 was.
+  const shown = preview ?? (removed ? null : currentUrl);
+  const canRemove = Boolean(onRemove) && (removed || Boolean(currentUrl) || Boolean(file));
 
   return (
     <div className="space-y-2">
@@ -56,7 +82,21 @@ export default function AvatarField({ id, label, currentUrl, file, onPick, hint 
           onChange={(event) => onPick(event.target.files?.[0] ?? null)}
           className="min-w-0 text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700 cursor-pointer"
         />
+        {canRemove && (
+          <button
+            type="button"
+            onClick={() => onRemove(!removed)}
+            className="shrink-0 text-xs text-rose-400 hover:text-rose-300 underline cursor-pointer"
+          >
+            {removed ? 'Keep' : 'Remove'}
+          </button>
+        )}
       </div>
+      {removed && (
+        <p className="text-xs text-amber-400">
+          The image will be removed when you save.
+        </p>
+      )}
       {hint && <p className="text-xs text-slate-500">{hint}</p>}
     </div>
   );

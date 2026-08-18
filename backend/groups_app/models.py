@@ -66,7 +66,7 @@ class Group(models.Model):
         membership = (
             GroupMember.objects
             .filter(group=self, is_admin=True)
-            .select_related('user')
+            .select_related('user__profile')
             .first()
         )
         return membership.user if membership else None

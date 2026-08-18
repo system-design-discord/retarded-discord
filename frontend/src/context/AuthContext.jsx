@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect } from 'react';
+import { createContext, useCallback, useState, useEffect } from 'react';
 import api from '../services/api';
 import { clearTokens, getAccessToken, getRefreshToken, storeTokens } from '../lib/tokens';
 
@@ -8,7 +8,12 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    const fetchProfile = async () => {
+    // Read once on mount, once on login — and, since profile propagation
+    // landed, once more whenever this user's own profile changes. It used to be
+    // the first two only, and nothing exported it, so a rename left
+    // `user.username` at whatever it was when the tab was opened and every
+    // screen reading it from here was stale until a reload.
+    const fetchProfile = useCallback(async () => {
         try {
             const response = await api.get('auth/me/');
             setUser(response.data);
@@ -17,7 +22,7 @@ export const AuthProvider = ({ children }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         const token = getAccessToken();
@@ -26,7 +31,7 @@ export const AuthProvider = ({ children }) => {
         } else {
             setLoading(false);
         }
-    }, []);
+    }, [fetchProfile]);
 
     // `identifier` is an email address or a username — the endpoint resolves
     // either (#128). The body key stays `username` because that is
@@ -58,7 +63,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, logout, loading, refreshUser: fetchProfile }}>
             {children}
         </AuthContext.Provider>
     );

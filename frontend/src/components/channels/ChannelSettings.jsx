@@ -5,7 +5,7 @@ import useChannelPermissions from '../../hooks/useChannelPermissions';
 import { CAN_EDIT_CHANNEL } from '../../lib/permissions';
 import NavSidebar from '../layout/NavSidebar';
 import AvatarField from '../common/AvatarField';
-import { useConfirm } from '../chat/primitives';
+import { Avatar, useConfirm } from '../chat/primitives';
 import { AuthContext } from '../../context/AuthContext';
 import { removeMember as removeChannelMember } from '../../services/roles';
 import readApiError from '../../lib/apiError';
@@ -36,7 +36,7 @@ export default function ChannelSettings() {
   const { channelId } = useParams();
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
-  const { channel, loading, error, setError, update } = useChannel(channelId);
+  const { channel, loading, error, setError, gone, update } = useChannel(channelId);
   const { can, isOwner, loading: loadingPermissions } = useChannelPermissions(channelId);
 
   const [name, setName] = useState('');
@@ -44,6 +44,9 @@ export default function ChannelSettings() {
   // A-3 — the picked file, held here rather than in `AvatarField`, because
   // `dirty` below has to count it.
   const [avatar, setAvatar] = useState(null);
+  // The third avatar state — see `AvatarField`. A picked file and a removal
+  // cannot travel in one request, so they are two flags rather than one value.
+  const [dropAvatar, setDropAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -53,12 +56,19 @@ export default function ChannelSettings() {
 
   const mayEdit = can(CAN_EDIT_CHANNEL);
 
+  // Deleted under you, by its owner or by anybody else holding
+  // `can_delete_channel`. Nothing on this screen has a subject any more.
+  useEffect(() => {
+    if (gone) navigate('/channels', { replace: true });
+  }, [gone, navigate]);
+
   // Seed from the server's answer and re-seed whenever it changes — including
   // after a save, so the fields show what was stored rather than what was typed.
   useEffect(() => {
     setName(channel?.name ?? '');
     setDescription(channel?.description ?? '');
     setAvatar(null);
+    setDropAvatar(false);
   }, [channel]);
 
   // A picked file counts toward `dirty`, or the Save button stays disabled with
@@ -68,7 +78,8 @@ export default function ChannelSettings() {
     channel &&
     (name !== (channel.name ?? '') ||
       description !== (channel.description ?? '') ||
-      Boolean(avatar));
+      Boolean(avatar) ||
+      dropAvatar);
 
   const save = async (event) => {
     event.preventDefault();
@@ -77,7 +88,12 @@ export default function ChannelSettings() {
     setSaving(true);
     setSaved(false);
     const fields = { name: name.trim(), description: description.trim() };
-    const failure = await update(avatar ? { ...fields, avatar } : fields);
+    // A `File` goes multipart, an explicit `null` stays JSON and clears the
+    // column, and neither key at all leaves the stored image alone. They are
+    // three cases and not two — see `GroupSettings`, which has the same three.
+    const failure = await update(
+      avatar ? { ...fields, avatar } : dropAvatar ? { ...fields, avatar: null } : fields,
+    );
     setSaving(false);
     setSaved(!failure);
   };
@@ -149,18 +165,27 @@ export default function ChannelSettings() {
 
       <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto">
         <div className="max-w-3xl mx-auto space-y-6">
-          <div className="min-w-0">
-            <Link
-              to={`/channels/${channelId}`}
-              className="text-[11px] text-slate-500 hover:text-slate-300 transition"
-            >
-              ← Back to the conversation
-            </Link>
-            <h1 className="text-2xl font-extrabold text-white truncate mt-1"># {channel.name}</h1>
-            <p className="text-slate-400 text-sm mt-1 truncate">
-              {channel.member_count} {channel.member_count === 1 ? 'member' : 'members'}
-              {channel.owner && <> · owned by @{channel.owner.username}</>}
-            </p>
+          <div className="min-w-0 flex items-start gap-4">
+            <Avatar
+              name={channel.name}
+              src={channel.avatar}
+              alt={channel.name}
+              size="lg"
+              className="mt-3"
+            />
+            <div className="min-w-0">
+              <Link
+                to={`/channels/${channelId}`}
+                className="text-[11px] text-slate-500 hover:text-slate-300 transition"
+              >
+                ← Back to the conversation
+              </Link>
+              <h1 className="text-2xl font-extrabold text-white truncate mt-1"># {channel.name}</h1>
+              <p className="text-slate-400 text-sm mt-1 truncate">
+                {channel.member_count} {channel.member_count === 1 ? 'member' : 'members'}
+                {channel.owner && <> · owned by @{channel.owner.username}</>}
+              </p>
+            </div>
           </div>
 
           {error && (
@@ -180,7 +205,8 @@ export default function ChannelSettings() {
             <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-400">
               Changing a channel's information needs{' '}
               <code className="text-slate-300">can_edit_channel</code>, which you do not hold here.
-              Ask the channel admin for a role that grants it.
+              Ask the channel admin for a role that grants it. Leaving the channel is yours either
+              way — it is below.
             </div>
           )}
 
@@ -229,8 +255,16 @@ export default function ChannelSettings() {
                   label="Image"
                   currentUrl={channel.avatar}
                   file={avatar}
-                  onPick={setAvatar}
-                  hint="Anyone who can edit the channel can change its image."
+                  onPick={(picked) => {
+                    setAvatar(picked);
+                    if (picked) setDropAvatar(false);
+                  }}
+                  onRemove={(next) => {
+                    setDropAvatar(next);
+                    if (next) setAvatar(null);
+                  }}
+                  removed={dropAvatar}
+                  hint="Anyone who can edit the channel can change or remove its image."
                 />
 
                 <div className="flex items-center gap-3">
@@ -273,13 +307,24 @@ export default function ChannelSettings() {
                   <span className="block text-xs text-slate-500 mt-0.5 break-words">
                     {channel.media_restricted
                       ? 'On — only members whose role grants can_send_media may attach files. You are the owner or hold it yourself, so you are unaffected.'
-                      : 'Off — every member of this channel may attach files, the same as text.'}
+                      : 'Off — every member of this channel may attach files, the same as text, whether or not their role grants can_send_media.'}
                   </span>
                 </span>
               </label>
 
+              {/* The half of the rule the product never said out loud. A
+                  channel admin who cleared `can_send_media` on a role and
+                  watched the holder keep attaching files had no way to find out
+                  from any screen that this switch is what arms it. The roles
+                  screen now says the same thing from its own side. */}
               <p className="text-xs text-slate-500">
-                Which roles grant <code className="text-slate-300">can_send_media</code> is set on{' '}
+                <strong className="text-slate-400 font-medium">
+                  This switch is what makes a role&apos;s{' '}
+                  <code className="text-slate-300">can_send_media</code> mean anything.
+                </strong>{' '}
+                While it is off the permission is dormant and every member may send media;
+                turning it on narrows that to the owner and the roles that grant it. Which
+                roles those are is set on{' '}
                 <Link
                   to={`/channels/${channelId}/roles`}
                   className="text-indigo-400 hover:text-indigo-300"

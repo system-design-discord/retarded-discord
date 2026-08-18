@@ -174,6 +174,147 @@ async def test_a_message_in_another_conversation_does_not_arrive(user, other_use
     await watcher.disconnect()
 
 
+# --------------------------------------------------- edits and deletions travel
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_an_edit_reaches_the_other_end_of_a_direct_message(user, other_user):
+    """The defect this pair of frames was added for.
+
+    Before it, `perform_update` published nothing, so the only thing that ever
+    corrected the other screen was `useConversation`'s fallback poll — which
+    backs off to thirty seconds precisely *while* the socket is connected. The
+    reporter's words were "it needs a refresh".
+    """
+    from realtime.publisher import on_message_updated
+
+    alice, _ = await connect('dm', other_user.pk, user)
+    await alice.receive_json_from()
+    bob, _ = await connect('dm', user.pk, other_user)
+    await bob.receive_json_from()
+
+    message = await Message.objects.acreate(sender=user, recipient=other_user, text='typo')
+    message.text = 'fixed'
+    message.is_edited = True
+    await message.asave()
+    await _publish(on_message_updated, message)
+
+    for who in (alice, bob):
+        event = await who.receive_json_from()
+        assert event['type'] == 'message.updated'
+        assert event['message']['id'] == message.pk
+        assert event['message']['text'] == 'fixed'
+        # Same shape as `message.created`, so one renderer serves both.
+        assert event['message']['is_edited'] is True
+        assert event['message']['sender']['username'] == user.username
+
+    await alice.disconnect()
+    await bob.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_a_deletion_reaches_the_other_end_and_carries_only_an_id(user, other_user):
+    """An id and not a row, because the row is gone by the time this runs.
+
+    This also pins the reason `messaging` passes the instance *and* the id: the
+    instance's target FKs survive `delete()` and are what name the conversation,
+    while `pk` does not survive and is what names the row.
+    """
+    from realtime.publisher import on_message_deleted
+
+    alice, _ = await connect('dm', other_user.pk, user)
+    await alice.receive_json_from()
+    bob, _ = await connect('dm', user.pk, other_user)
+    await bob.receive_json_from()
+
+    message = await Message.objects.acreate(sender=user, recipient=other_user, text='regret')
+    message_id = message.pk
+    await message.adelete()
+    assert message.pk is None
+
+    await _publish_deletion(on_message_deleted, message, message_id)
+
+    for who in (alice, bob):
+        event = await who.receive_json_from()
+        assert event == {'type': 'message.deleted', 'id': message_id}
+
+    await alice.disconnect()
+    await bob.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_an_edit_in_a_group_reaches_its_members(user, other_user):
+    """The reporter saw this in all three conversation kinds, and one group name
+    per conversation is what makes one fix cover all three."""
+    from realtime.publisher import on_message_updated
+
+    group = await Group.objects.acreate(name='team')
+    await GroupMember.objects.acreate(group=group, user=user, is_admin=True)
+    await GroupMember.objects.acreate(group=group, user=other_user)
+
+    watcher, _ = await connect('group', group.pk, other_user)
+    await watcher.receive_json_from()
+
+    message = await Message.objects.acreate(sender=user, group=group, text='before')
+    message.text = 'after'
+    await message.asave()
+    await _publish(on_message_updated, message)
+
+    event = await watcher.receive_json_from()
+    assert event['type'] == 'message.updated'
+    assert event['message']['text'] == 'after'
+
+    await watcher.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_an_edit_in_a_topic_reaches_the_channel_members(user, other_user):
+    from realtime.publisher import on_message_updated
+
+    channel = await Channel.objects.acreate(owner=user, name='general')
+    await ChannelMember.objects.acreate(channel=channel, user=other_user)
+    topic = await Topic.objects.acreate(channel=channel, name='general')
+
+    watcher, _ = await connect('topic', topic.pk, other_user)
+    await watcher.receive_json_from()
+
+    message = await Message.objects.acreate(sender=user, topic=topic, text='before')
+    message.text = 'after'
+    await message.asave()
+    await _publish(on_message_updated, message)
+
+    event = await watcher.receive_json_from()
+    assert event['type'] == 'message.updated'
+    assert event['message']['text'] == 'after'
+
+    await watcher.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.asyncio
+async def test_an_edit_elsewhere_does_not_arrive(user, other_user, user_factory):
+    """The same scoping the create path has: an edit is addressed to one
+    conversation's group and nobody else is in it."""
+    from realtime.publisher import on_message_updated
+
+    stranger = await _make(user_factory, 'stranger')
+    watcher, _ = await connect('dm', other_user.pk, user)
+    await watcher.receive_json_from()
+
+    elsewhere = await Message.objects.acreate(
+        sender=other_user, recipient=stranger, text='not yours'
+    )
+    elsewhere.text = 'still not yours'
+    await elsewhere.asave()
+    await _publish(on_message_updated, elsewhere)
+
+    assert await watcher.receive_nothing(timeout=0.5)
+    await watcher.disconnect()
+
+
 # ------------------------------------------------------- the socket is read-only
 
 @pytest.mark.django_db(transaction=True)
@@ -218,6 +359,15 @@ async def _publish(handler, message):
     from asgiref.sync import sync_to_async
 
     await sync_to_async(handler, thread_sensitive=False)(message=message)
+
+
+async def _publish_deletion(handler, message, message_id):
+    """`on_message_deleted` takes the id separately — see its docstring."""
+    from asgiref.sync import sync_to_async
+
+    await sync_to_async(handler, thread_sensitive=False)(
+        message=message, message_id=message_id
+    )
 
 
 async def _make(user_factory, username):

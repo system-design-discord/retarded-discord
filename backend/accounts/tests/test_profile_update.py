@@ -102,3 +102,154 @@ def test_keeping_your_own_username_is_not_a_clash(auth_client, user):
     )
 
     assert response.status_code == 200
+
+
+# --------------------------------------------- the change is announced (#RT)
+
+def _capture(event):
+    """Subscribe a recorder to one event and hand back its list. Restored
+    afterwards by `conftest.isolated_event_subscribers`."""
+    from common import events
+
+    seen = []
+    events.subscribe(event, lambda **payload: seen.append(payload))
+    return seen
+
+
+@pytest.mark.django_db
+def test_updating_a_profile_announces_it_on_the_seam(auth_client, user):
+    """The defect behind "profile updates do not show without a refresh".
+
+    A username and an avatar are rendered on every screen that has ever
+    mentioned this person, and each of those screens was holding a copy taken
+    when it loaded. Nothing invalidated them.
+    """
+    from common import events
+
+    seen = _capture(events.PROFILE_UPDATED)
+
+    response = auth_client(user).patch(
+        '/api/profile/', {'bio': 'now with a bio'}, format='json'
+    )
+
+    assert response.status_code == 200
+    assert len(seen) == 1
+    assert seen[0]['user_id'] == user.pk
+    assert seen[0]['payload']['bio'] == 'now with a bio'
+
+
+@pytest.mark.django_db
+def test_the_announcement_carries_only_public_fields(auth_client, user):
+    """It goes to **every** connected client, so it must be what a stranger may
+    see — `PublicProfileSerializer` and never `ProfileSerializer`, which carries
+    the caller's own email and their invitation setting."""
+    from common import events
+
+    seen = _capture(events.PROFILE_UPDATED)
+
+    auth_client(user).patch('/api/profile/', {'bio': 'hello'}, format='json')
+
+    payload = seen[0]['payload']
+    assert set(payload) == {'user', 'bio', 'avatar'}
+    assert 'email' not in payload
+    assert 'allow_invites' not in payload
+    assert user.email not in str(payload)
+
+
+@pytest.mark.django_db
+def test_a_failing_subscriber_does_not_fail_the_update(auth_client, user):
+    """`events.publish` logs and swallows: a gateway that is down costs the
+    live push and nothing else. The row is already saved."""
+    from common import events
+
+    def explode(**_):
+        raise RuntimeError('the gateway is down')
+
+    events.subscribe(events.PROFILE_UPDATED, explode)
+
+    response = auth_client(user).patch('/api/profile/', {'bio': 'saved'}, format='json')
+
+    assert response.status_code == 200
+    assert response.data['bio'] == 'saved'
+
+
+# --- taking the picture away ------------------------------------------------
+#
+# The API has accepted this for as long as it has accepted an upload —
+# `avatar` is `allow_null=True` and the hand-written `update()` writes a `None`
+# straight through — and no test had ever said so, which is part of why no
+# screen offered it. A file input can say "unchanged" or "here is a file" and
+# never "none", so the SPA needed a control of its own; this is the end it was
+# aimed at.
+
+
+def _with_avatar(client):
+    """Give the caller a picture, and answer the URL it came back as."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    # The smallest thing `ImageField` will accept — a 1×1 GIF. `validate_file`
+    # is a serializer rule on `MediaFile`, not on `Profile`, so the extension
+    # allowlist is not in play here.
+    gif = SimpleUploadedFile(
+        'face.gif',
+        b'GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!'
+        b'\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00'
+        b'\x00\x02\x02D\x01\x00;',
+        content_type='image/gif',
+    )
+    response = client.patch('/api/profile/', {'avatar': gif}, format='multipart')
+    assert response.status_code == 200
+    assert response.data['avatar']
+    return response.data['avatar']
+
+
+@pytest.mark.django_db
+def test_an_explicit_null_clears_the_avatar(auth_client, user):
+    client = auth_client(user)
+    _with_avatar(client)
+
+    response = client.patch('/api/profile/', {'avatar': None}, format='json')
+
+    assert response.status_code == 200
+    assert response.data['avatar'] is None
+    assert client.get('/api/profile/').data['avatar'] is None
+
+
+@pytest.mark.django_db
+def test_omitting_the_key_leaves_the_avatar_alone(auth_client, user):
+    """The half that makes a partial PATCH safe.
+
+    `update()` reads `validated_data.get('avatar', instance.avatar)`, so a
+    request that only renames must not take the picture with it — otherwise
+    every screen that PATCHes one field is a silent avatar delete.
+    """
+    client = auth_client(user)
+    stored = _with_avatar(client)
+
+    response = client.patch('/api/profile/', {'bio': 'unrelated'}, format='json')
+
+    assert response.status_code == 200
+    assert response.data['avatar'] == stored
+
+
+@pytest.mark.django_db
+def test_clearing_the_avatar_announces_it_on_the_seam(auth_client, user):
+    """A removal is as visible to other people as an upload was.
+
+    `PROFILE_UPDATED` is fanned out to every connected socket and the SPA
+    re-reads on it, so this is what stops a deleted picture surviving on
+    everybody else's screen until they reload.
+    """
+    from common import events
+
+    client = auth_client(user)
+    _with_avatar(client)
+
+    seen = []
+    events.subscribe(events.PROFILE_UPDATED, lambda **payload: seen.append(payload))
+
+    client.patch('/api/profile/', {'avatar': None}, format='json')
+
+    assert len(seen) == 1
+    assert seen[0]['user_id'] == user.pk
+    assert seen[0]['payload']['avatar'] is None

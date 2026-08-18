@@ -64,6 +64,11 @@ ROLE_GRANTS_UNHELD_PERMISSIONS = "This role grants permissions you do not hold: 
 MESSAGE_NEEDS_A_TARGET = "A message must have a recipient, a group or a topic."
 MESSAGE_NEEDS_ONE_TARGET = "A message must have exactly one target: a recipient, a group or a topic."
 MESSAGE_NEEDS_CONTENT = "A message needs text or an attachment."
+# The conversation named by `recipient` / `group` / `topic` is not there. DRF's
+# own `does_not_exist` is `Invalid pk "5" - object does not exist.`, which named
+# a database concept at somebody who had just watched a topic disappear from
+# under them.
+MESSAGE_TARGET_GONE = "That conversation no longer exists."
 MESSAGE_TEXT_REQUIRED = "Message text cannot be empty."
 
 # --- Accounts ---------------------------------------------------------------

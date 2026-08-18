@@ -1,10 +1,11 @@
-import { useContext } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useContext, useEffect } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import useGroup from '../../hooks/useGroup';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
 import Chat from '../chat/Chat';
 import { Avatar } from '../chat/primitives';
+import usePresence from '../../hooks/usePresence';
 
 // US-2.2 — send and receive messages in a group.
 //
@@ -16,10 +17,16 @@ import { Avatar } from '../chat/primitives';
 // The group itself comes from `useGroup` since `U-10`, so a rename or a
 // membership change on the settings screen is reflected here on the next read
 // rather than needing a reload — and `isAdmin` is derived in one place rather
-// than by this file comparing ids.
+// than by this file comparing ids. "The next read" used to mean *this*
+// member's next read: `useGroup` re-read after its own writes and on
+// `profileVersion`, which is a counter about people, so a rename by somebody
+// else reached this header only when the screen remounted. It listens for
+// `GROUP_UPDATED` now and the header follows within a frame.
 
 export default function GroupChat() {
+  const { isOnline } = usePresence();
   const { groupId } = useParams();
+  const navigate = useNavigate();
   // `/chat/:groupId` has no query string of its own, but a search hit adds one
   // to name the message it matched (#129) — the same parameter the other two
   // shells read, so `Chat` receives it identically from all three.
@@ -27,7 +34,15 @@ export default function GroupChat() {
   const highlight = Number(searchParams.get('message')) || null;
   const { user } = useContext(AuthContext);
 
-  const { group, members, admin, isAdmin, loading, error } = useGroup(groupId);
+  const { group, members, admin, isAdmin, loading, error, gone } = useGroup(groupId);
+
+  // Any member may delete a group (US-6.3, #124), so this is not the rare case
+  // it looks like. There is nothing honest to render once it has happened —
+  // the messages went with it — so the screen leaves rather than showing an
+  // error about a group the reader was legitimately in a moment ago.
+  useEffect(() => {
+    if (gone) navigate('/groups', { replace: true });
+  }, [gone, navigate]);
 
   // US-3.3 and US-3.5: the author always, and the group's admin over anybody's
   // message. The server decides this in roles.services.may_delete_message —
@@ -51,6 +66,7 @@ export default function GroupChat() {
           id={groupId}
           highlightMessageId={highlight}
           title={group?.name ?? 'Group'}
+          avatar={group?.avatar ?? null}
           subtitle={group ? `${members.length} member${members.length === 1 ? '' : 's'}` : null}
           placeholder={group ? `Message ${group.name}…` : 'Message the group…'}
           emptyHint="Be the first to say something."
@@ -85,7 +101,12 @@ export default function GroupChat() {
               <div className="space-y-1">
                 {members.map((member) => (
                   <div key={member.id} className="flex items-center gap-2.5 p-2 rounded-lg">
-                    <Avatar name={member.username} size="sm" />
+                    <Avatar
+                      name={member.username}
+                      src={member.avatar}
+                      online={isOnline(member.id)}
+                      size="sm"
+                    />
                     <span className="text-sm text-slate-300 truncate">{member.username}</span>
                     {member.id === admin?.id && (
                       <span className="ml-auto text-[10px] uppercase tracking-wide text-indigo-400">

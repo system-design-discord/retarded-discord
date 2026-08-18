@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import useChannel from '../../hooks/useChannel';
 import useChannelPermissions from '../../hooks/useChannelPermissions';
 import { CAN_CREATE_TOPIC, CAN_EDIT_CHANNEL, CAN_SEND_MEDIA } from '../../lib/permissions';
@@ -8,6 +8,7 @@ import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
 import Chat from '../chat/Chat';
 import { Avatar, EmptyState, useConfirm } from '../chat/primitives';
+import usePresence from '../../hooks/usePresence';
 
 // F-05 — US-2.3 and US-4.5. A channel, its topics, and the conversation in one.
 //
@@ -24,9 +25,11 @@ import { Avatar, EmptyState, useConfirm } from '../chat/primitives';
 // the channel.
 
 export default function ChannelView() {
+  const { isOnline, profileVersion } = usePresence();
   const { channelId } = useParams();
+  const navigate = useNavigate();
   const { user } = useContext(AuthContext);
-  const { channel, topics, loading, error, setError, addTopic, renameTopic, removeTopic } =
+  const { channel, topics, loading, error, setError, gone, addTopic, renameTopic, removeTopic } =
     useChannel(channelId);
   // US-8.3, and the only read of `me/permissions/` on this screen. The hook is
   // shared with F-06's role manager rather than this file asking a second time.
@@ -63,7 +66,19 @@ export default function ChannelView() {
     return () => {
       cancelled = true;
     };
-  }, [channelId]);
+  }, [channelId, profileVersion]);
+
+  // The channel was deleted while this screen was open — by its owner, or by
+  // anybody else holding `can_delete_channel`. There is no error to show and no
+  // empty state that would be honest: the subject of the screen is gone, so the
+  // screen goes with it. `useChannel` reports the fact; where to go is this
+  // component's business, because navigation is not a data concern.
+  //
+  // The same frame is what removes the row from `/channels`, so the list is
+  // already correct by the time this lands on it.
+  useEffect(() => {
+    if (gone) navigate('/channels', { replace: true });
+  }, [gone, navigate]);
 
   const requested = Number(searchParams.get('topic')) || null;
   // The message a search hit named (#129). The landing effect below rewrites
@@ -215,7 +230,19 @@ export default function ChannelView() {
 
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="px-4 py-3 border-b border-slate-800 bg-slate-900/80 flex items-start justify-between gap-4">
-          <div className="min-w-0">
+          <div className="min-w-0 flex items-start gap-3">
+            {/* A-3's other half. The picture has been uploadable from the
+                settings screen for a while and was drawn nowhere but on that
+                screen's own form, so a channel with a photograph and one
+                without were the same `#` everywhere it mattered. */}
+            <Avatar
+              name={channel?.name}
+              src={channel?.avatar}
+              alt={channel?.name}
+              size="lg"
+              className="mt-3"
+            />
+            <div className="min-w-0">
             <Link to="/channels" className="text-[11px] text-slate-500 hover:text-slate-300">
               ← All channels
             </Link>
@@ -231,6 +258,7 @@ export default function ChannelView() {
                 </>
               )}
             </p>
+            </div>
           </div>
 
           <div className="shrink-0 flex items-center gap-2">
@@ -242,17 +270,25 @@ export default function ChannelView() {
             >
               🛡️ Roles
             </Link>
-            {/* #125. Offered to holders of `can_edit_channel` only — the screen
-                itself refuses everybody else and the server refuses them twice,
-                but a settings link that leads to a refusal is worse than none. */}
-            {mayEditChannel && (
-              <Link
-                to={`/channels/${channelId}/settings`}
-                className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-indigo-300 transition"
-              >
-                ⚙ Settings
-              </Link>
-            )}
+            {/* #125 put this behind `can_edit_channel`, on the reasoning that a
+                settings link leading to a refusal is worse than none. That was
+                true of the screen it was written for and stopped being true when
+                A-10 put **leaving the channel** on it: the members who cannot
+                edit are most of them, and leaving is the one thing on that
+                screen that is *theirs* — SH.2's "so that I do not end up in
+                groups or channels I do not want to join", enforced by the API
+                for every member since A-10 and reachable in the product by
+                nobody but an editor.
+
+                So it is offered to every member, and the screen tells a
+                non-editor plainly which parts of it are not theirs rather than
+                refusing them at the door. */}
+            <Link
+              to={`/channels/${channelId}/settings`}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-indigo-300 transition"
+            >
+              ⚙ Settings
+            </Link>
           </div>
         </header>
 
@@ -396,6 +432,7 @@ export default function ChannelView() {
             id={active.id}
             highlightMessageId={highlight}
             title={`#${active.name}`}
+            avatar={channel?.avatar ?? null}
             subtitle={channel ? `in # ${channel.name}` : null}
             placeholder={`Message #${active.name}…`}
             emptyHint="Be the first to say something in this topic."
@@ -410,7 +447,12 @@ export default function ChannelView() {
                 <div className="space-y-1">
                   {members.map((member) => (
                     <div key={member.id} className="flex items-center gap-2.5 p-2 rounded-lg">
-                      <Avatar name={member.user?.username} size="sm" />
+                      <Avatar
+                        name={member.user?.username}
+                        src={member.user?.avatar}
+                        online={isOnline(member.user?.id)}
+                        size="sm"
+                      />
                       {/* A-4 — a channel you share is as good a reason to look
                           somebody up as a conversation you have had. */}
                       <Link

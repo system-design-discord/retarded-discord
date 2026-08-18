@@ -10,7 +10,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from common import messages
+from common import events, messages
 
 from .models import Profile
 from .serializers import (
@@ -133,6 +133,30 @@ class ProfileDetailView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         profile, _ = Profile.objects.get_or_create(user=self.request.user)
         return profile
+
+    def perform_update(self, serializer):
+        """US-10.1, and the half of it that was missing: telling anybody.
+
+        A username and an avatar are rendered on every screen that has ever
+        mentioned this person — message bubbles, member lists, the
+        direct-message rail — and each of those screens was holding a copy taken
+        when it loaded. Nothing invalidated them, so a rename was invisible
+        everywhere until a reload.
+
+        Announced on the seam, like every other cross-module fact
+        (architecture.tex §5.1); `realtime` subscribes and this module does not
+        know that it does. **`PublicProfileSerializer` and not
+        `ProfileSerializer`**: the frame reaches every connected client, so it
+        must carry what a stranger may see and not the caller's own email or
+        their invitation setting.
+        """
+        profile = serializer.save()
+
+        events.publish(
+            events.PROFILE_UPDATED,
+            user_id=profile.user_id,
+            payload=PublicProfileSerializer(profile).data,
+        )
 
 
 class ProfileRetrieveAPIView(generics.RetrieveAPIView):

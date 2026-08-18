@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AuthContext } from './AuthContext';
+import PresenceContext from './PresenceContext';
+import usePresenceState from '../hooks/usePresenceState';
 import {
   listNotifications,
   markAllRead as markAllReadRequest,
@@ -28,6 +30,13 @@ import { readApiError } from '../lib/apiError';
 // whatever was generated while the socket was down, and merging by `id` means a
 // notification already on screen is not shown twice when the re-read returns it
 // alongside the pushed copy.
+//
+// **This socket also carries presence and profile changes**, and they are here
+// for the reason above rather than by accretion: it is the only connection the
+// SPA holds open on every screen, so a second provider wanting the same
+// property would have to open a second connection per tab. The *state* lives in
+// `PresenceContext`, which this renders — one socket, two concerns, neither
+// leaking into the other's API.
 
 const NotificationsContext = createContext(null);
 
@@ -38,7 +47,15 @@ function merge(current, incoming) {
 }
 
 export function NotificationsProvider({ children }) {
-  const { user } = useContext(AuthContext);
+  const { user, refreshUser } = useContext(AuthContext);
+  const {
+    value: presenceValue,
+    receiveSnapshot,
+    receivePresence,
+    receiveProfile,
+    receiveStructure,
+    clear: clearPresence,
+  } = usePresenceState();
 
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,14 +90,27 @@ export function NotificationsProvider({ children }) {
     refresh();
   }, [refresh]);
 
+  // **Keyed on `user?.id`, not on `user`.** `AuthContext.fetchProfile` answers
+  // with a fresh object, so `refreshUser()` — which the effect below fires
+  // whenever your own profile changes anywhere — used to change this
+  // dependency's identity and tear the socket down and back up. That is a
+  // presence transition each way for a rename: the server marks you offline,
+  // announces it to everybody, then marks you online and announces that too.
+  // The identity of the signed-in *person* is what this connection depends on.
+  const userId = user?.id ?? null;
+
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setLive(false);
       return undefined;
     }
 
     const socket = openNotificationSocket({
       onNotification: (incoming) => setNotifications((current) => merge(current, incoming)),
+      onPresenceSnapshot: receiveSnapshot,
+      onPresence: receivePresence,
+      onProfile: receiveProfile,
+      onStructure: receiveStructure,
       onStatus: (status) => {
         const connected = status === 'live';
         setLive(connected);
@@ -91,7 +121,27 @@ export function NotificationsProvider({ children }) {
     });
 
     return () => socket.close();
-  }, [user]);
+  }, [userId, receiveSnapshot, receivePresence, receiveProfile, receiveStructure]);
+
+  // Signing out is the one moment presence is genuinely unknown rather than
+  // merely unreported, so the set is cleared there and nowhere else. A dropped
+  // socket must *not* clear it: it would blank every dot in the product on a
+  // reconnect, and the snapshot that follows would put them all back.
+  useEffect(() => {
+    if (!user) clearPresence();
+  }, [user, clearPresence]);
+
+  // Your own other tabs are somebody's screens too — the dashboard greeting was
+  // stale in every one of them. `AuthContext` holds the copy that goes stale and
+  // this provider mounts inside it, so this is the one place that can reach both
+  // the frame and the copy.
+  useEffect(() => {
+    if (presenceValue.changedUserId != null && presenceValue.changedUserId === user?.id) {
+      refreshUser?.();
+    }
+    // Keyed on the counter as well as the id: two changes in a row by the same
+    // person are two events, and an id-only dependency would see one.
+  }, [presenceValue.profileVersion, presenceValue.changedUserId, user?.id, refreshUser]);
 
   const unread = notifications.filter((notification) => !notification.is_read).length;
 
@@ -135,7 +185,11 @@ export function NotificationsProvider({ children }) {
     markAllRead,
   };
 
-  return <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>;
+  return (
+    <NotificationsContext.Provider value={value}>
+      <PresenceContext.Provider value={presenceValue}>{children}</PresenceContext.Provider>
+    </NotificationsContext.Provider>
+  );
 }
 
 export default NotificationsContext;

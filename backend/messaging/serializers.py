@@ -12,10 +12,40 @@ from .models import Message
 TARGET_FIELDS = ('recipient', 'group', 'topic')
 
 
+def _target_field(name):
+    """One of the three targets, refusing a vanished one in the app's own words.
+
+    `ModelSerializer` builds these three automatically and they work; the only
+    thing wrong with the generated version is what it *says*. DRF's stock
+    `does_not_exist` is `Invalid pk "5" - object does not exist.`, and the way
+    to see it is to have a topic deleted out from under you and then press send:
+    the product answered a database noun to somebody who had done nothing wrong.
+    Every other user-facing string in the product is in `common/messages.py`
+    (#127) and this was the one that was not.
+
+    The queryset is read off the model field rather than importing `User`,
+    `Group` and `Topic` here, so `TARGET_FIELDS` above stays the single list of
+    what a target can be — a fourth one is a line there and nothing here.
+    Everything else about the field matches what `ModelSerializer` would have
+    generated: all three columns are `null=True, blank=True`.
+    """
+    field = Message._meta.get_field(name)
+    return serializers.PrimaryKeyRelatedField(
+        queryset=field.related_model._default_manager.all(),
+        required=False,
+        allow_null=True,
+        error_messages={'does_not_exist': messages.MESSAGE_TARGET_GONE},
+    )
+
+
 class MessageSerializer(serializers.ModelSerializer):
     sender = PublicUserSerializer(read_only=True)
     media = MediaFileSerializer(read_only=True)
     media_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+
+    recipient = _target_field('recipient')
+    group = _target_field('group')
+    topic = _target_field('topic')
 
     class Meta:
         model = Message

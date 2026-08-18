@@ -99,10 +99,13 @@ def test_directory_returns_public_fields_only(
     )
 
     assert response.status_code == 200
+    # `avatar` is a display field and is None for a user who never set one;
+    # the criterion this test carries is that nothing *private* is here.
     assert results(response) == [
         {
             'id': target.pk,
             'username': target.username,
+            'avatar': None,
         }
     ]
     assert target.email not in str(response.data)

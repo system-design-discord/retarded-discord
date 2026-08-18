@@ -14,12 +14,30 @@ from .serializers import GroupSerializer
 User = get_user_model()
 
 
+def _audience(group):
+    """Every user id that should hear about a change to this group.
+
+    Read **before** a destructive write and handed to the event, because a
+    group's `GroupMember` rows cascade with it — `common/events.py` documents
+    that as the shape of the whole structural family. `channels_app.views` has
+    the mirror of this function; they are four lines each and neither module
+    imports the other's, which is `architecture.tex` §5's decomposition working
+    rather than duplication worth removing.
+    """
+    return list(group.members.values_list('id', flat=True))
+
+
 class GroupListCreateView(generics.ListCreateAPIView):
     serializer_class = GroupSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Group.objects.filter(members=self.request.user)
+        # `members` is nested through `PublicUserSerializer`, which reads each
+        # user's profile for the avatar — prefetched so a group list is not one
+        # query per member.
+        return Group.objects.filter(members=self.request.user).prefetch_related(
+            'members__profile'
+        )
 
     def perform_create(self, serializer):
         # US-5.1 — the creator is the admin. One write, in GroupMember, which is
@@ -33,7 +51,9 @@ class GroupDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Group.objects.filter(members=self.request.user)
+        return Group.objects.filter(members=self.request.user).prefetch_related(
+            'members__profile'
+        )
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
@@ -54,6 +74,27 @@ class GroupDetailView(generics.RetrieveUpdateDestroyAPIView):
             )
             if not allowed:
                 self.permission_denied(request, message=messages.NO_PERMISSION_TO_EDIT_GROUP)
+
+    def perform_update(self, serializer):
+        group = serializer.save()
+        # US-6.4 is a member right, so a rename is something every other member
+        # is looking at: the group list, the chat header and the settings screen
+        # all draw it. The gateway subscribes; this module does not import it.
+        events.publish(
+            events.GROUP_UPDATED,
+            audience=_audience(group),
+            group_id=group.pk,
+            payload=self.get_serializer(group).data,
+        )
+
+    def perform_destroy(self, instance):
+        # Before the delete, for the reason `_audience` gives.
+        audience = _audience(instance)
+        group_id = instance.pk
+
+        instance.delete()
+
+        events.publish(events.GROUP_DELETED, audience=audience, group_id=group_id)
 
 
 class GroupAddRemoveMemberView(APIView):
@@ -106,8 +147,13 @@ class GroupAddRemoveMemberView(APIView):
             # member. US-11.1 names being added to a *group or channel*, so both
             # sides have to say so; notifications subscribes, and this module
             # does not import it (architecture.tex §5.1).
+            #
+            # The audience is read after the write, so it contains the person
+            # who was just added — the one client for whom this frame is the
+            # difference between the group appearing in their list and not.
             events.publish(
                 events.MEMBER_ADDED,
+                audience=_audience(group),
                 group=group,
                 user=target_user,
                 actor=request.user,
@@ -120,7 +166,20 @@ class GroupAddRemoveMemberView(APIView):
         elif action == 'remove':
             if target_user == group.admin:
                 return Response({"error": messages.CANNOT_REMOVE_GROUP_ADMIN}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Before the write, so whoever is leaving is still in the audience:
+            # theirs is the screen that cannot re-read the group afterwards.
+            audience = _audience(group)
+
             group.members.remove(target_user)
+
+            events.publish(
+                events.MEMBER_REMOVED,
+                audience=audience,
+                group=group,
+                user=target_user,
+                actor=request.user,
+            )
             return Response(
                 {"message": messages.USER_REMOVED_FROM_GROUP.format(username=target_user.username)},
                 status=status.HTTP_200_OK,

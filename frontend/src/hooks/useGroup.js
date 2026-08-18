@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useState } from 'react';
+import usePresence from './usePresence';
 import {
   addMember as addMemberRequest,
   deleteGroup,
@@ -36,20 +37,23 @@ import { readApiError } from '../lib/apiError';
 // and deleting the group are every member's, so neither consults it.
 
 export default function useGroup(groupId) {
+  const { profileVersion, structure } = usePresence();
+
   const { user } = useContext(AuthContext);
 
   const [group, setGroup] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [gone, setGone] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ quiet = false } = {}) => {
     if (!groupId) {
       setGroup(null);
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    if (!quiet) setLoading(true);
     try {
       setGroup(await getGroup(groupId));
       setError('');
@@ -62,13 +66,40 @@ export default function useGroup(groupId) {
         readApiError(caught, 'This group could not be opened. You may not be a member of it.'),
       );
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [groupId]);
 
+  // `profileVersion` — a rename or a new avatar anywhere invalidates the
+  // nested member rows this read carries, and re-reading is what makes the
+  // change appear without a manual refresh. On the effect rather than on
+  // `refresh` itself, because the callback's own closure does not read it.
   useEffect(() => {
+    setGone(false);
     refresh();
-  }, [refresh]);
+  }, [refresh, profileVersion]);
+
+  // The group's *own* facts change too, and `profileVersion` never hears about
+  // them: it is a counter for people. A member renaming the group, changing its
+  // picture, adding somebody or deleting the whole thing published nothing at
+  // all until the structural family existed, so every other member's header,
+  // member list and settings form stayed on the previous answer until they
+  // remounted the screen.
+  //
+  // Choosy, like `useChannel`: this holds one group, so it can tell whether the
+  // frame is about it.
+  const aboutThisGroup = structure.scope === 'group' && structure.id === Number(groupId);
+
+  useEffect(() => {
+    if (!structure.version || !aboutThisGroup) return;
+
+    if (structure.action === 'deleted') {
+      setGone(true);
+      return;
+    }
+    refresh({ quiet: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [structure.version]);
 
   const guard = useCallback(
     async (work, fallback) => {
@@ -131,6 +162,7 @@ export default function useGroup(groupId) {
     loading,
     error,
     setError,
+    gone,
     refresh,
     update,
     addMember,

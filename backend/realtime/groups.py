@@ -40,6 +40,22 @@ def user_group(user_id):
     return f'user.{int(user_id)}'
 
 
+def broadcast_group():
+    """Every signed-in socket, and nothing narrower.
+
+    The other four groups address a conversation or a person. This one exists
+    for the two facts that are not about either: who is online, and what a
+    profile now says. Both are rendered wherever a person appears rather than
+    where a conversation does, so there is no narrower address that would
+    reach the right screens.
+
+    Only `NotificationConsumer` joins it, because that is the one socket the
+    SPA holds open on every screen — a conversation socket comes and goes with
+    the route.
+    """
+    return 'broadcast'
+
+
 def group_for_message(message):
     """The group a newly created message should be fanned out to.
 

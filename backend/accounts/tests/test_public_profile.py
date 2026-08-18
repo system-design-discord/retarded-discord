@@ -33,7 +33,12 @@ def test_public_profile_carries_display_fields_only(auth_client, user, stranger)
 
     assert response.status_code == 200
     assert set(response.data) == PUBLIC_FIELDS
-    assert set(response.data['user']) == {'id', 'username'}
+    # `avatar` on the nested user is deliberate: `PublicUserSerializer` is what
+    # every member list and message bubble renders a face from, and it is the
+    # same picture this endpoint already returns one level up. The point of
+    # asserting the whole set is that adding to it is a decision, not that the
+    # set never changes.
+    assert set(response.data['user']) == {'id', 'username', 'avatar'}
 
 
 @pytest.mark.django_db

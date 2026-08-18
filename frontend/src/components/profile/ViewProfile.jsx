@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import usePresence from '../../hooks/usePresence';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getMyProfile, getPublicProfile } from '../../services/profile';
 import { AuthContext } from '../../context/AuthContext';
@@ -36,6 +37,7 @@ const ViewProfile = () => {
   // Compared as numbers: a route parameter is always a string and `user.id` is
   // not, so `===` on the raw pair would send you to the public endpoint for
   // your own profile — reachable, but missing your email and the edit button.
+  const { isOnline, profileVersion } = usePresence();
   const targetId = Number(userId) || null;
   const isOwnProfile = !targetId || targetId === currentUser?.id;
 
@@ -65,7 +67,11 @@ const ViewProfile = () => {
     };
 
     fetchProfile();
-  }, [targetId, isOwnProfile]);
+    // Somebody looking at your profile while you edit it saw the old bio until
+    // they reloaded. `profileVersion` changes for anybody's edit rather than
+    // only this one's — a screen re-reading one profile it is already showing is
+    // cheaper than the bookkeeping needed to know whose it was.
+  }, [targetId, isOwnProfile, profileVersion]);
 
   if (isLoading) {
     return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loading profile...</div>;
@@ -110,6 +116,21 @@ const ViewProfile = () => {
             <div className="min-w-0">
               <h2 className="text-2xl font-extrabold text-white break-words">{profileUser.username}</h2>
               <p className="text-xs text-slate-400 break-words">@{profileUser.username}</p>
+              {/* Presence, and only for somebody else: your own profile telling
+                  you that you are online is not information. The dot and the
+                  word both, because a colour alone is not readable to everybody
+                  and this is the one screen with room to say it. */}
+              {!isOwnProfile && profileUser.id && (
+                <p className="text-xs mt-1 flex items-center gap-1.5 text-slate-400">
+                  <span
+                    aria-hidden="true"
+                    className={`w-2 h-2 rounded-full ${
+                      isOnline(profileUser.id) ? 'bg-emerald-500' : 'bg-slate-600'
+                    }`}
+                  />
+                  {isOnline(profileUser.id) ? 'Online' : 'Offline'}
+                </p>
+              )}
               {/* Only show email if it's your own profile — PublicProfileSerializer
                   omits it for everybody else, so this is never somebody's address
                   handed to a stranger. */}

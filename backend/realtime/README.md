@@ -55,17 +55,123 @@ generic `1006` and tells the caller nothing.
 ```json
 {"type": "subscribed", "conversation": {"kind": "dm", "id": 2}}
 {"type": "message.created", "message": { … MessageSerializer … }}
+{"type": "message.updated", "message": { … MessageSerializer … }}
+{"type": "message.deleted", "id": 41}
 
 {"type": "subscribed", "notifications": true}
 {"type": "notification.created", "notification": { … NotificationSerializer … }}
+{"type": "presence.snapshot",  "online": [1, 2]}
+{"type": "presence.changed",   "user_id": 2, "online": false}
+{"type": "profile.updated",    "user_id": 2, "profile": { … PublicProfileSerializer … }}
+
+{"type": "structure.changed", "scope": "channel", "action": "updated", "id": 3,
+                              "object": { … ChannelSerializer … }}
+{"type": "structure.changed", "scope": "topic",   "action": "deleted", "id": 7, "channel_id": 3}
+{"type": "structure.changed", "scope": "group",   "action": "member_added", "id": 5, "user_id": 9}
 ```
 
 Each payload is the REST endpoint's own output — identical to `GET /api/messages/` and
 `GET /api/notifications/` respectively. A client reconciling two shapes for the same object ends up
 with two renderers, which is the mistake `F-00` spent three points undoing on the frontend.
+`message.updated` therefore carries the whole message and not a diff.
+
+`message.deleted` is the one frame that is not a serialized object, and it cannot be: the row is
+gone by the time the gateway can say so. An id is also all a client needs, because the only correct
+reaction to a deletion is to drop what it is already holding.
+
+**A `type` with no matching method on the consumer kills the socket.** Channels resolves a
+channel-layer `type` of `"message.updated"` to a method named `message_updated`, and raises if there
+is none. Adding a frame means adding both halves.
 
 Both sockets are **delivery only**. Sending anything up either one answers with an error naming the
 REST endpoint that does the write.
+
+## Presence
+
+The notification socket carries presence as well, and it is there rather than on a route of its own
+for one reason: it is the only connection the SPA holds open on **every** screen. A conversation
+socket comes and goes with the route, so "connected" would have meant "currently reading a
+conversation".
+
+`presence.py` is the store. It is deliberately **not** a database column: a `last_seen` timestamp
+would be a migration and an `ERD.tex` amendment, and it would still answer wrong — a process that
+dies leaves the column saying *online* for ever. Redis holds one set of channel names per user, so a
+restart starts from nobody (`config/asgi.py` calls `reset()`; it is **not** in
+`RealtimeConfig.ready()`, because `celery_worker` and `celery_beat` run that too and either
+restarting would wipe live users).
+
+Two properties are load-bearing and both were bugs before they were properties:
+
+* **Transitions are reference-counted**, so somebody with three tabs who closes one stays online.
+  `mark_online` and `mark_offline` answer *whether the user crossed the boundary*, and the consumer
+  broadcasts only on the crossing.
+* **Each transition is one Lua script.** A page load closes the old socket and opens the new one at
+  the same instant, so the two calls genuinely interleave; written as separate commands they left the
+  connection set and the online set disagreeing, which shows up as a user with no sockets still
+  listed as online — permanently. Redis runs a script atomically.
+
+A client is never told about its own transition (`presence_changed` drops it): the
+`presence.snapshot` it received on connect already said so, and sending it anyway raced that
+snapshot, since one is a direct send and the other travels through the channel layer.
+
+**The client has to close its socket on `pagehide`**, and `frontend/src/lib/socket.js` does. React
+does not run effect cleanups when the document is destroyed, so before that every full page load left
+a connection open on the server — four page loads in one tab measured as four connections, all of
+them until the browser exited. Logging out then closed only the socket the current page had opened
+while the earlier ones kept the user marked online.
+
+## Profile changes
+
+`profile.updated` goes to `broadcast_group()` — everybody — because a username and an avatar are
+rendered on every screen that has ever mentioned that person, and working out which of those a given
+client has open is the client's business. The payload arrives already serialized for the same reason
+`notification.created` does, with a different motive: it reaches every connected socket, so which
+fields of a profile are public is `accounts`' decision and not the gateway's.
+
+## Structural changes
+
+`structure.changed` is one frame for eight events, and that is the whole of its design.
+
+**What it says.** `scope` is `channel`, `group` or `topic`; `action` is `created`, `updated`,
+`deleted`, `member_added` or `member_removed`; `id` names the thing. A topic frame also carries
+`channel_id`, because a client holding one channel has to decide whether a topic is one of its own
+without a second read. `updated` and `created` carry `object`, already serialized, for the reason
+`notification.created` does. `deleted` carries none — the row is gone, exactly as with
+`message.deleted`. The membership actions carry `user_id` and no object: who joined or left is the
+whole of the news, and what they can now see is the client's own re-read to make.
+
+**Why one frame and not eight.** A `type` with no matching consumer method kills the socket (above),
+so every wire type is a method that has to exist. Eight types would be eight chances to forget one,
+against a `scope`/`action` pair a client switches on anyway. The *seam* still names all eight
+events separately — `common/events.py` is a domain contract and `groups_app` publishing
+`GROUP_DELETED` should not have to know that the gateway flattens it.
+
+**Why the audience travels in the payload.** Every one of these events carries
+`audience`, a list of user ids, computed by the publishing module. `realtime` never asks who the
+members are:
+
+* it *cannot*, on the delete paths — memberships are CASCADE, so by the time a subscriber runs there
+  is nobody left to ask. The audience is read immediately **before** `.delete()`, next to where the
+  view already counts the cascade for its report.
+* it *should not*, on the rest — who may see a channel is `roles`' decision, and a gateway that
+  queried memberships would be deciding it a second time, in a second place, against
+  `architecture.tex` §5.1.
+
+`MEMBER_ADDED` is the one event whose audience is read *after* the write, because the new member has
+to be in it.
+
+**Why `user_group` and not a group per channel.** `_fan_out_structure` loops and sends one
+`group_send` per member. The alternative — a channel-layer group per channel that every notification
+socket joins — needs joins and leaves kept in step with membership changes, and the delete path is
+the worst possible place to be maintaining that bookkeeping. Audiences here are one channel's or one
+group's members, so the loop is cheap and it cannot drift.
+
+**What it is for.** Before this, `profileVersion` was the SPA's only cross-client invalidation
+signal, and it ticks for *user* profiles only — so every hook holding a channel, group or topic list
+re-read on mount and never again. Leaving the screen and coming back was the fix. Now the client
+counts `structure.changed` frames and re-reads the lists on any of them; `useChannel` and `useGroup`
+are choosier, matching on `scope`/`id`, and expose `gone` when the thing they are showing was
+deleted under them.
 
 ## How a message gets here
 

@@ -45,6 +45,24 @@ def _deletion_report(deleted_per_model):
     }
 
 
+def _audience(channel):
+    """Every user id that should hear about a change to this channel.
+
+    Read **before** a destructive write and passed into the event, because a
+    channel's `ChannelMember` rows cascade with it: a subscriber that looked the
+    membership up afterwards would find none and tell nobody. `common/events.py`
+    documents that as the shape of the whole structural family.
+
+    The owner is unioned in rather than assumed. `Channel.objects.create_with_owner`
+    writes them a membership row, but nothing in the schema *requires* one to
+    survive, and the one person who implicitly holds every permission is the
+    worst one to silently drop from a fan-out.
+    """
+    return sorted(
+        set(channel.memberships.values_list('user_id', flat=True)) | {channel.owner_id}
+    )
+
+
 class ChannelListCreateView(generics.ListCreateAPIView):
     """US-4.1 — create a channel and become its admin.
 
@@ -67,7 +85,7 @@ class ChannelListCreateView(generics.ListCreateAPIView):
             Channel.objects
             .filter(Q(owner=user) | Q(memberships__user=user))
             .distinct()
-            .select_related('owner')
+            .select_related('owner__profile')
             .prefetch_related('topics')
         )
 
@@ -114,13 +132,36 @@ class ChannelDetailView(ChannelScopedMixin, generics.RetrieveUpdateDestroyAPIVie
     def get_object(self):
         return self.get_channel()
 
+    def perform_update(self, serializer):
+        channel = serializer.save()
+        # Notifications does not subscribe to this one; the gateway does, so
+        # every other member's list, header and settings screen corrects itself
+        # instead of waiting for a remount.
+        events.publish(
+            events.CHANNEL_UPDATED,
+            audience=_audience(channel),
+            channel_id=channel.pk,
+            payload=self.get_serializer(channel).data,
+        )
+
     def destroy(self, request, *args, **kwargs):
         """200 with what went with it, not a silent 204.
 
         A channel takes its topics, memberships, roles and every message in
         them. Django's own delete() tally is the honest source for that count.
         """
-        _, deleted_per_model = self.get_object().delete()
+        channel = self.get_object()
+        # Before the delete, and that is the whole reason the event carries an
+        # audience: `ChannelMember` cascades, so a moment from now there is
+        # nobody left to address the news to.
+        audience = _audience(channel)
+        channel_id = channel.pk
+
+        _, deleted_per_model = channel.delete()
+
+        events.publish(
+            events.CHANNEL_DELETED, audience=audience, channel_id=channel_id,
+        )
         return Response({'deleted': _deletion_report(deleted_per_model)})
 
 
@@ -145,7 +186,14 @@ class TopicListCreateView(ChannelScopedMixin, generics.ListCreateAPIView):
         return Topic.objects.filter(channel=self.get_channel())
 
     def perform_create(self, serializer):
-        serializer.save(channel=self.get_channel())
+        topic = serializer.save(channel=self.get_channel())
+        events.publish(
+            events.TOPIC_CREATED,
+            audience=_audience(topic.channel),
+            channel_id=topic.channel_id,
+            topic_id=topic.pk,
+            payload=self.get_serializer(topic).data,
+        )
 
 
 class TopicDetailView(ChannelScopedMixin, generics.RetrieveUpdateDestroyAPIView):
@@ -169,13 +217,41 @@ class TopicDetailView(ChannelScopedMixin, generics.RetrieveUpdateDestroyAPIView)
         channel is a 404 here rather than something this gate decides on."""
         return Topic.objects.filter(channel=self.get_channel())
 
+    def perform_update(self, serializer):
+        topic = serializer.save()
+        events.publish(
+            events.TOPIC_UPDATED,
+            audience=_audience(topic.channel),
+            channel_id=topic.channel_id,
+            topic_id=topic.pk,
+            payload=self.get_serializer(topic).data,
+        )
+
     def destroy(self, request, *args, **kwargs):
         """C-03: deleting a topic must not silently delete its messages.
 
         `Topic.messages` is CASCADE, so they go. The response says how many
         rather than answering 204 and leaving the caller to find out.
+
+        It says so to the *caller*. Everybody else hears through TOPIC_DELETED,
+        and they have to: a cascade at the database level never reaches
+        `MessageDetailView.perform_destroy`, so not one of those messages
+        publishes a MESSAGE_DELETED of its own. Another member sitting in this
+        topic learns from this event or from nothing at all.
         """
-        _, deleted_per_model = self.get_object().delete()
+        topic = self.get_object()
+        audience = _audience(topic.channel)
+        channel_id = topic.channel_id
+        topic_id = topic.pk
+
+        _, deleted_per_model = topic.delete()
+
+        events.publish(
+            events.TOPIC_DELETED,
+            audience=audience,
+            channel_id=channel_id,
+            topic_id=topic_id,
+        )
         return Response({'deleted_messages': _deletion_report(deleted_per_model)['messages']})
 
 
@@ -201,7 +277,7 @@ class ChannelMemberListCreateView(ChannelScopedMixin, generics.ListCreateAPIView
         return (
             ChannelMember.objects
             .filter(channel=self.get_channel())
-            .select_related('user', 'role', 'channel')
+            .select_related('user__profile', 'role', 'channel')
         )
 
     def create(self, request, *args, **kwargs):
@@ -231,8 +307,14 @@ class ChannelMemberListCreateView(ChannelScopedMixin, generics.ListCreateAPIView
 
         # Notifications and the real-time gateway subscribe to this rather than
         # being imported here (architecture.tex §5.1, common/events.py).
+        #
+        # The audience is read *after* the write here, unlike everywhere else in
+        # this file: the person who was just added is the one who most needs the
+        # frame — it is what puts the channel in their list without a reload —
+        # and a moment ago they were not in the membership to read.
         events.publish(
             events.MEMBER_ADDED,
+            audience=_audience(channel),
             channel=channel,
             user=target,
             actor=request.user,
@@ -281,5 +363,20 @@ class ChannelMemberDetailView(ChannelScopedMixin, generics.DestroyAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Before the delete, so the audience still contains whoever is leaving.
+        # That is deliberate: their own screen is the one that cannot re-read
+        # the channel afterwards to find out what happened to it.
+        audience = _audience(membership.channel)
+        channel = membership.channel
+        target = membership.user
+
         membership.delete()
+
+        events.publish(
+            events.MEMBER_REMOVED,
+            audience=audience,
+            channel=channel,
+            user=target,
+            actor=request.user,
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)

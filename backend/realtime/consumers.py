@@ -40,6 +40,7 @@ from groups_app.models import Group
 from roles import services as roles
 
 from . import groups as group_names
+from . import presence
 
 User = get_user_model()
 
@@ -138,6 +139,25 @@ class ConversationConsumer(AsyncWebsocketConsumer):
             'message': event['message'],
         }))
 
+    async def message_updated(self, event):
+        """An edit — US-3.1. Same payload as `message_created`, different name.
+
+        A method per `type` is not optional: Channels resolves a channel-layer
+        `type` to a method of this name, and a frame arriving with no matching
+        method raises and takes the socket down with it.
+        """
+        await self.send(text_data=json.dumps({
+            'type': 'message.updated',
+            'message': event['message'],
+        }))
+
+    async def message_deleted(self, event):
+        """A deletion — US-3.3 to US-3.6. An id, because the row is gone."""
+        await self.send(text_data=json.dumps({
+            'type': 'message.deleted',
+            'id': event['id'],
+        }))
+
 
 class NotificationConsumer(AsyncWebsocketConsumer):
     """One socket, one person's notifications — RT-03, US-B1.2.
@@ -157,6 +177,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         self.group_name = None
+        self.user_id = None
 
         user = self.scope.get('user')
         if user is None or not user.is_authenticated:
@@ -166,14 +187,55 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             await self.close(code=CLOSE_UNAUTHENTICATED)
             return
 
+        self.user_id = user.id
         self.group_name = group_names.user_group(user.id)
         await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.channel_layer.group_add(group_names.broadcast_group(), self.channel_name)
         await self.accept()
         await self.send(text_data=json.dumps({'type': 'subscribed', 'notifications': True}))
+
+        # Presence. This socket is the one the SPA holds open on every screen,
+        # so "connected here" and "signed in and using the product" are the same
+        # fact — which is why presence lives on this consumer and not on the
+        # conversation one, whose sockets come and go with the route.
+        if await presence.mark_online(user.id, self.channel_name):
+            await self._announce_presence(online=True)
+
+        # The state that was already true before this client arrived. Everything
+        # after it is a `presence.changed` frame, so the client never polls and
+        # never has to guess about the people it has not yet seen change.
+        await self.send(text_data=json.dumps({
+            'type': 'presence.snapshot',
+            'online': await presence.online_user_ids(),
+        }))
 
     async def disconnect(self, close_code):
         if self.group_name:
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            await self.channel_layer.group_discard(
+                group_names.broadcast_group(), self.channel_name
+            )
+
+        # Going offline needs no cooperation from the logout endpoint and none
+        # was added: logging out clears `AuthContext.user`, which re-runs the
+        # effect that opened this socket and closes it on the way. Closing a tab
+        # or navigating takes the same path through the client's `pagehide`
+        # handler — and it has to, because React does not run effect cleanups
+        # when the document is destroyed. Without that handler every page load
+        # left a socket open here and the user was online for ever.
+        #
+        # `mark_offline` is reference-counted, so closing one of several tabs
+        # announces nothing.
+        if self.user_id is not None:
+            if await presence.mark_offline(self.user_id, self.channel_name):
+                await self._announce_presence(online=False)
+
+    async def _announce_presence(self, online):
+        """Tell every connected client that this user crossed the boundary."""
+        await self.channel_layer.group_send(
+            group_names.broadcast_group(),
+            {'type': 'presence.changed', 'user_id': self.user_id, 'online': online},
+        )
 
     async def receive(self, text_data=None, bytes_data=None):
         await self.send(text_data=json.dumps({
@@ -189,6 +251,78 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'type': 'notification.created',
             'notification': event['notification'],
         }))
+
+    async def presence_changed(self, event):
+        """Somebody came online or went offline. Sent to `broadcast_group()`.
+
+        Unlike a notification, this is addressed to everybody, and that is not a
+        leak: it says that a user id is connected, and `GET /api/users/` already
+        hands ids and usernames to any signed-in caller.
+
+        **Your own transition is dropped here**, because `group_send` has no way
+        to exclude the socket that caused it and a client being told it is
+        online is not information — the `presence.snapshot` it received on
+        connect already said so. Sending it anyway also raced that snapshot: one
+        is a direct send and the other travels through the channel layer, so
+        their order was not fixed and a client could see itself flicker.
+
+        Note this drops nothing a *second* tab needed. Coming online and going
+        offline are both reference-counted transitions, so the only socket of
+        yours that could hear "you came online" is the first one, and the only
+        one that could hear "you went offline" has already closed.
+        """
+        if event['user_id'] == self.user_id:
+            return
+
+        await self.send(text_data=json.dumps({
+            'type': 'presence.changed',
+            'user_id': event['user_id'],
+            'online': event['online'],
+        }))
+
+    async def profile_updated(self, event):
+        """A profile changed — `common.events.PROFILE_UPDATED`.
+
+        Public fields only, and `accounts` is what decided which those are; this
+        forwards a payload whose shape it never learns, exactly as
+        `notification_created` above does.
+        """
+        await self.send(text_data=json.dumps({
+            'type': 'profile.updated',
+            'user_id': event['user_id'],
+            'profile': event['profile'],
+        }))
+
+    async def structure_changed(self, event):
+        """A channel, a group or a topic changed — the structural family.
+
+        **One method for eight events, and that is the point.** Channels turns a
+        channel-layer `type` into a call to the method of that name, and a frame
+        arriving with no matching method raises and takes the socket down with
+        it. Eight types would be eight chances to forget one and eight ways to
+        disconnect every client in the product; the client branches on `scope`
+        and `action` inside the frame instead.
+
+        Forwarded field by field rather than by splatting `event`, so the
+        channel-layer's own `type` key cannot leak onto the wire and a
+        publisher cannot widen the frame without this file agreeing.
+
+        This says *that* something changed and not what it now is for anything
+        the client has to re-read anyway. `object` carries the row where the
+        publisher had one to render, and is absent for a delete because there is
+        nothing left to send.
+        """
+        frame = {
+            'type': 'structure.changed',
+            'scope': event['scope'],
+            'action': event['action'],
+            'id': event['id'],
+        }
+        for optional in ('channel_id', 'user_id', 'object'):
+            if optional in event:
+                frame[optional] = event[optional]
+
+        await self.send(text_data=json.dumps(frame))
 
 
 class UnknownRouteConsumer(AsyncWebsocketConsumer):

@@ -16,9 +16,21 @@
 
 export const PERMISSIONS = [
   {
+    // **The one entry of the eight that is not a rule on its own**, and saying
+    // so here is the point. `roles.services.may_send_media` composes it with
+    // `Channel.media_restricted`: an unrestricted channel lets every member
+    // send media with no role at all, so clearing this checkbox on a channel
+    // whose Media restricted switch is off changes nothing. That is the
+    // documented behaviour — the screen used to present it as a peer of the
+    // other seven, which is why turning it off looked like it should bite.
     key: 'can_send_media',
     label: 'Send media',
-    hint: 'Upload images and files into this channel (US-4.8, US-7.3).',
+    hint:
+      'Upload images and files into this channel (US-4.8, US-7.3). Takes effect '
+      + "only while the channel's Media restricted setting is on; in an "
+      + 'unrestricted channel every member may send media regardless.',
+    // `RoleManager` reads this to decide whether to say the toggle is dormant.
+    conditionalOn: 'media_restricted',
   },
   {
     key: 'can_delete_message',

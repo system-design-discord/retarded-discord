@@ -35,12 +35,35 @@ product, and most of what is below exists because of that.
   only thing the user sees.
 - **Removing the admin is a 400, not a 403.** A group has exactly one admin, so *remove the last
   admin* and *the admin removes themselves* are the same act and the same message.
-- **There is no leave endpoint.** A plain member removing themselves hits the admin gate and gets
-  403. Nothing in the UI offers it, and the settings screen says so rather than staying silent.
+- **There is no leave *endpoint*, but leaving works.** Since `A-10`,
+  `roles.may_remove_group_member` grants `actor == target` for any member, so leaving is
+  `removeMember(groupId, myOwnId)` — the same call with your own id. The admin is the one member
+  still refused, and that is the 400 above and not a permission refusal. `GroupSettings` offers it in
+  its danger zone, and that screen is linked from the group list and from the chat header, so every
+  member can reach it.
 - **`DELETE groups/<id>/` is 204 with no body.** Unlike a channel delete, which reports what
   cascaded, there is nothing to show afterwards — so the screen warns before instead.
 - **The list is paginated.** It always was; reading it as an array is what made `/groups` show its
   empty state to everybody until `U-10`. `useGroups` goes through `lib/pagination`.
+
+## The group picture, and edits arriving live
+
+A group has an `avatar` — the same signed-URL field a user profile has — and `GroupSettings` uploads
+it through the shared `AvatarField`. Its Remove control sends `avatar: null`, which reaches the
+server as JSON: `lib/multipart.js#toRequestBody` only builds a `FormData` when the body carries a
+`File`, and a `FormData` would drop the `null` on the way. So picking a file and removing the
+picture are mutually exclusive in the UI because they are mutually exclusive on the wire.
+
+The picture is then drawn wherever the group's name is — the group list, the chat header, the
+settings header and the dashboard's recent conversations. It is an `Avatar` with no `online` prop,
+so no presence dot: a group is not a person. `useRecentChats` carries it on the row, taken from the
+`listGroups()` map the hook already fetches, because a message payload names its group by bare id.
+
+`useGroups` and `useGroup` re-read on `structure.changed` frames off the notification socket — a
+rename by another member reaches the header without a reload, and a group you were just added to
+appears in the list. `useGroup` matches on `scope === 'group' && id === mine` and sets `gone` when
+the frame says this group was deleted, at which point `GroupChat` and `GroupSettings` navigate to
+`/groups` rather than re-reading into a 404. `backend/realtime/README.md` describes the frame.
 
 ## Why settings is a route and not a modal
 

@@ -23,8 +23,12 @@ import { toRequestBody } from '../lib/multipart';
 //   * **Removing the group admin is a 400, not a 403,** and since a group has
 //     exactly one admin, "remove the last admin" and "the admin removes
 //     themselves" are the same refusal.
-//   * **There is no leave endpoint.** A plain member removing themselves hits
-//     the admin gate above and gets 403. Nothing in the UI should offer it.
+//   * **There is no leave *endpoint*, but leaving works.** A-10 made
+//     `roles.may_remove_group_member` grant `actor == target` for any member, so
+//     leaving is spelled `removeMember(groupId, myOwnId)` — the same call, with
+//     your own id. It is not a 403 any more; the admin is the one member it
+//     still refuses, and that refusal is the 400 above rather than a permission
+//     one. `GroupSettings` offers it in its danger zone.
 //   * **`DELETE groups/<id>/` answers 204 with no body** — unlike a channel
 //     delete, which reports what cascaded. There is nothing to show afterwards.
 //

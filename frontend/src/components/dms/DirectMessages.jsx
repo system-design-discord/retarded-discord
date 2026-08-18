@@ -7,6 +7,7 @@ import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
 import Chat from '../chat/Chat';
 import { Avatar, EmptyState } from '../chat/primitives';
+import usePresence from '../../hooks/usePresence';
 
 // US-2.1 and US-2.5 in the UI.
 //
@@ -26,6 +27,7 @@ import { Avatar, EmptyState } from '../chat/primitives';
 // dashboard. Behaviour here is unchanged — it is the same code, imported.
 
 export default function DirectMessages() {
+  const { isOnline, profileVersion } = usePresence();
   const { user } = useContext(AuthContext);
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -72,9 +74,13 @@ export default function DirectMessages() {
     }
   }, [user?.id]);
 
+  // `profileVersion` and not a list of ids: this rail's names come from
+  // `nameMissingPartners`, which reads a profile per correspondent, so any
+  // profile changing anywhere may be one of these. Re-deriving is cheap and is
+  // authoritative; patching a name in place would not be.
   useEffect(() => {
     loadConversations();
-  }, [loadConversations]);
+  }, [loadConversations, profileVersion]);
 
   // Land on the most recent conversation when no one is named in the URL.
   useEffect(() => {
@@ -174,7 +180,12 @@ export default function DirectMessages() {
                 onClick={() => open(person.id)}
                 className="w-full text-left p-2.5 rounded-xl hover:bg-slate-800/60 flex items-center gap-3 cursor-pointer"
               >
-                <Avatar name={person.username} size="sm" />
+                <Avatar
+                  name={person.username}
+                  src={person.avatar}
+                  online={isOnline(person.id)}
+                  size="sm"
+                />
                 <span className="text-sm truncate">{person.username}</span>
               </button>
             ))}
@@ -206,7 +217,11 @@ export default function DirectMessages() {
                     : 'hover:bg-slate-800/50 text-slate-300'
                 }`}
               >
-                <Avatar name={conversation.username} />
+                <Avatar
+                  name={conversation.username}
+                  src={conversation.avatar}
+                  online={isOnline(conversation.id)}
+                />
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-sm truncate">{conversation.username}</div>
                   <div className="text-xs text-slate-500 truncate mt-0.5">{conversation.preview}</div>

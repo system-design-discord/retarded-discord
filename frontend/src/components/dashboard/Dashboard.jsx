@@ -2,11 +2,13 @@ import React, { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext'; // Import the AuthContext
 import useRecentChats from '../../hooks/useRecentChats';
-import { EmptyState, Timestamp } from '../chat/primitives';
+import { Avatar, EmptyState, Timestamp } from '../chat/primitives';
+import usePresence from '../../hooks/usePresence';
 import NavSidebar from '../layout/NavSidebar';
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { isOnline } = usePresence();
 
   // Grab the user from context to display their name
   const { user } = useContext(AuthContext);
@@ -80,9 +82,23 @@ const Dashboard = () => {
                   onClick={() => navigate(chat.to)}
                   className="w-full text-left p-4 bg-slate-900 border border-slate-800/80 hover:bg-slate-800/60 rounded-xl flex justify-between items-center gap-4 transition cursor-pointer"
                 >
-                  <div className="min-w-0">
-                    <div className="font-bold text-slate-200 truncate">{chat.title}</div>
-                    <div className="text-xs text-slate-400 mt-1 truncate">{chat.preview}</div>
+                  <div className="min-w-0 flex items-center gap-3">
+                    {/* A row is a person or a room, and both have a picture.
+                        `useRecentChats` carries it on the merged row so this
+                        does not have to know which kind it is drawing — except
+                        for the dot, which only a person can have: `userId` is
+                        null on a group row and `Avatar` draws no dot when
+                        `online` is undefined. */}
+                    <Avatar
+                      name={chat.title}
+                      src={chat.avatar}
+                      alt={chat.userId ? undefined : chat.title}
+                      online={chat.userId ? isOnline(chat.userId) : undefined}
+                    />
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-200 truncate">{chat.title}</div>
+                      <div className="text-xs text-slate-400 mt-1 truncate">{chat.preview}</div>
+                    </div>
                   </div>
                   <Timestamp value={chat.at} className="shrink-0" />
                 </button>

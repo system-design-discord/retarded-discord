@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import usePresence from './usePresence';
 import {
   deleteMessage,
   editMessage,
@@ -47,6 +48,8 @@ function readError(error, fallback) {
 }
 
 export default function useConversation(kind, id) {
+  const { profileVersion } = usePresence();
+
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -121,6 +124,45 @@ export default function useConversation(kind, id) {
     });
   }, []);
 
+  // An edit arriving over the socket. **A separate reducer, and `receive` must
+  // stay insert-if-absent rather than becoming a general upsert** — that
+  // property is the whole of the #137 fix, and folding the two together brings
+  // the double-rendered message back.
+  //
+  // Absent id is a deliberate no-op: an edit is not an arrival, and inserting a
+  // message this client never loaded would put a row from the middle of the
+  // history at the bottom of the screen. If it is not on screen there is
+  // nothing to correct.
+  const applyUpdate = useCallback((incoming) => {
+    setMessages((current) => {
+      if (!current.some((message) => message.id === incoming.id)) return current;
+      return current.map((message) => (message.id === incoming.id ? incoming : message));
+    });
+  }, []);
+
+  // A deletion arriving over the socket. An id, because the row is gone by the
+  // time the gateway can say so.
+  const applyRemoval = useCallback((messageId) => {
+    setMessages((current) => {
+      if (!current.some((message) => message.id === messageId)) return current;
+      return current.filter((message) => message.id !== messageId);
+    });
+  }, []);
+
+  // A rename or a new avatar changes what every bubble in this conversation
+  // should be drawing, because `MessageSerializer.sender` is a nested copy taken
+  // when the page loaded. Re-reading is the authoritative fix and it is one
+  // request; patching the sender of every matching row on the client would be a
+  // second, divergent truth.
+  useEffect(() => {
+    if (!target || !profileVersion) return;
+    refresh({ quiet: true });
+    // `refresh` is deliberately absent: it changes identity with `target`, and
+    // naming it here would re-read on every conversation switch as well, which
+    // the mount effect above already does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileVersion]);
+
   // The socket. It carries no error into `error`: a refused *write* is
   // something the user did and must see, while a gateway that will not connect
   // is something the poll already covers, and turning it into a red banner
@@ -132,10 +174,12 @@ export default function useConversation(kind, id) {
       kind: target.kind,
       id: target.id,
       onMessage: receive,
+      onUpdate: applyUpdate,
+      onRemove: applyRemoval,
       onStatus: (status) => setLive(status === 'live'),
     });
     return () => socket.close();
-  }, [target, receive]);
+  }, [target, receive, applyUpdate, applyRemoval]);
 
   // #123 — a message, optionally carrying a file.
   //

@@ -116,13 +116,29 @@ class MessageDetailView(generics.RetrieveUpdateDestroyAPIView):
         `roles.services.may_edit_message`; this module only asks.
         """
         roles.require_edit_message(self.request.user, serializer.instance)
-        serializer.save(is_edited=True, edited_at=timezone.now())
+        message = serializer.save(is_edited=True, edited_at=timezone.now())
+
+        # The other half of the conversation is looking at the old text. Without
+        # this, the only thing that ever corrected it was `useConversation`'s
+        # fallback poll — which backs off to thirty seconds precisely *while*
+        # the socket is connected, so the edit read as "never, until I
+        # refresh". Published on the seam rather than pushed from here, for the
+        # same reason the create does it (architecture.tex §5.1).
+        events.publish(events.MESSAGE_UPDATED, message=message)
 
     def perform_destroy(self, instance):
         """US-3.3 to US-3.6. The author, a group admin, a channel owner or a
         holder of `can_delete_message` — and this module decides none of it."""
         roles.require_delete_message(self.request.user, instance)
+
+        # Captured before the write: `Model.delete()` sets `pk` to None, and an
+        # announcement nobody can match to a row on screen is worthless. The
+        # instance still goes along because its target FKs survive the delete,
+        # and those are what name the conversation to fan out to.
+        message_id = instance.pk
         instance.delete()
+
+        events.publish(events.MESSAGE_DELETED, message=instance, message_id=message_id)
 
 
 class MessageSearchView(generics.ListAPIView):
@@ -146,5 +162,5 @@ class MessageSearchView(generics.ListAPIView):
             Message.objects
             .visible_to(self.request.user)
             .search(term)
-            .select_related('sender', 'recipient', 'group', 'topic__channel', 'media')
+            .select_related('sender__profile', 'recipient', 'group', 'topic__channel', 'media')
         )
