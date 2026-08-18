@@ -2,7 +2,7 @@ import { useContext, useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import useChannel from '../../hooks/useChannel';
 import useChannelPermissions from '../../hooks/useChannelPermissions';
-import { CAN_CREATE_TOPIC, CAN_SEND_MEDIA } from '../../lib/permissions';
+import { CAN_CREATE_TOPIC, CAN_EDIT_CHANNEL, CAN_SEND_MEDIA } from '../../lib/permissions';
 import { listMembers } from '../../services/roles';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
@@ -94,6 +94,10 @@ export default function ChannelView() {
   // action nobody could perform, so nothing observed it. The server refuses the
   // upload and the attach regardless — this only stops offering a control that
   // was always going to 403.
+  // #125 — the settings screen's gate, asked here only to decide whether to
+  // offer the link to it.
+  const mayEditChannel = can(CAN_EDIT_CHANNEL);
+
   const restricted = Boolean(channel?.media_restricted);
   const maySendMedia = !restricted || isOwner || can(CAN_SEND_MEDIA);
   const mediaRestrictionReason = maySendMedia
@@ -156,14 +160,27 @@ export default function ChannelView() {
             </p>
           </div>
 
-          {/* F-06's screen. It was reachable only through a picker that existed
-              because this view did not; now it is linked from its subject. */}
-          <Link
-            to={`/channels/${channelId}/roles`}
-            className="shrink-0 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-indigo-300 transition"
-          >
-            🛡️ Roles
-          </Link>
+          <div className="shrink-0 flex items-center gap-2">
+            {/* F-06's screen. It was reachable only through a picker that existed
+                because this view did not; now it is linked from its subject. */}
+            <Link
+              to={`/channels/${channelId}/roles`}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-indigo-300 transition"
+            >
+              🛡️ Roles
+            </Link>
+            {/* #125. Offered to holders of `can_edit_channel` only — the screen
+                itself refuses everybody else and the server refuses them twice,
+                but a settings link that leads to a refusal is worse than none. */}
+            {mayEditChannel && (
+              <Link
+                to={`/channels/${channelId}/settings`}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:border-indigo-500 hover:text-indigo-300 transition"
+              >
+                ⚙ Settings
+              </Link>
+            )}
+          </div>
         </header>
 
         <nav className="px-4 py-2 border-b border-slate-800 bg-slate-900/40 flex items-center gap-2 overflow-x-auto">

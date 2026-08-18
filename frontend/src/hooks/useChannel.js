@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createTopic, deleteTopic, getChannel } from '../services/channels';
+import { createTopic, deleteTopic, getChannel, updateChannel } from '../services/channels';
 import { readApiError } from '../lib/apiError';
 
 // One channel and its topics.
@@ -48,6 +48,31 @@ export default function useChannel(channelId) {
 
   const topics = channel?.topics ?? [];
 
+  /**
+   * US-4.7 / US-6.1 — rename or re-describe the channel. Needs
+   * `can_edit_channel`, which the server enforces.
+   *
+   * Answers **`null` on success and the server's message on failure**, the
+   * `useGroup` / `useChannelRoles` guard shape, because the caller is a form
+   * that needs to know whether to say "Saved." A refused PATCH leaves `channel`
+   * exactly as the server last described it, so the fields re-seed to what is
+   * stored rather than to what was typed.
+   */
+  const update = useCallback(
+    async (body) => {
+      try {
+        setChannel(await updateChannel(channelId, body));
+        setError('');
+        return null;
+      } catch (caught) {
+        const message = readApiError(caught, 'The channel could not be updated.');
+        setError(message);
+        return message;
+      }
+    },
+    [channelId],
+  );
+
   /** US-4.5 — add a topic. Returns it, or `null` if the server refused. */
   const addTopic = useCallback(
     async (name) => {
@@ -80,5 +105,5 @@ export default function useChannel(channelId) {
     [channelId, refresh],
   );
 
-  return { channel, topics, loading, error, setError, refresh, addTopic, removeTopic };
+  return { channel, topics, loading, error, setError, refresh, update, addTopic, removeTopic };
 }
