@@ -63,6 +63,7 @@ ROLE_GRANTS_UNHELD_PERMISSIONS = "This role grants permissions you do not hold: 
 
 MESSAGE_NEEDS_A_TARGET = "A message must have a recipient, a group or a topic."
 MESSAGE_NEEDS_ONE_TARGET = "A message must have exactly one target: a recipient, a group or a topic."
+MESSAGE_NEEDS_CONTENT = "A message needs text or an attachment."
 MESSAGE_TEXT_REQUIRED = "Message text cannot be empty."
 
 # --- Accounts ---------------------------------------------------------------

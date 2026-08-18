@@ -325,3 +325,60 @@ def require_send_media(user, channel):
     """`may_send_media`, but raises so a view can simply call and continue."""
     if not may_send_media(user, channel):
         raise PermissionDenied(messages.MEDIA_RESTRICTED_IN_CHANNEL)
+
+
+def may_remove_group_member(actor, group, target):
+    """May `actor` take `target` out of this group? — A-10, SH.2.
+
+    Two different rights wearing one endpoint. Removing *somebody else* is the
+    admin's, and `user_stories_en.tex` §Assumptions is explicit that it is one
+    of exactly three powers that separate an admin from a member. Removing
+    *yourself* is nobody's to grant: leaving is the other half of SH.2, whose
+    justification is *"so that I do not end up in groups or channels I do not
+    want to join"* — and until this, `allow_invites` enforced that only
+    **before** you were added. Turn the switch off afterwards and you were still
+    in every group you had already been put into, with no way out but to ask an
+    admin.
+
+    It is a rule here rather than an `if` in the view for the usual reason: the
+    view asking "is this me?" is the view deciding a permission for itself
+    (architecture.tex §5.1).
+
+    The admin leaving is refused, and deliberately not by this predicate — the
+    caller answers 400 `CANNOT_REMOVE_GROUP_ADMIN` for that, because "the last
+    administrator cannot walk out" is a statement about the group's shape rather
+    than about who is asking.
+    """
+    if actor is None or not actor.is_authenticated:
+        return False
+    if actor == target:
+        return is_group_member(actor, group)
+    return has_group_permission(actor, group, 'can_remove_member')
+
+
+def require_remove_group_member(actor, group, target):
+    """`may_remove_group_member`, but raises so a view can call and continue."""
+    if not may_remove_group_member(actor, group, target):
+        raise PermissionDenied(messages.ONLY_GROUP_ADMIN_MANAGES_MEMBERS)
+
+
+def may_remove_channel_member(actor, channel, target):
+    """The channel-shaped equivalent — A-10, SH.2.
+
+    Removing another member needs `can_remove_member`; leaving needs only that
+    you are in it. The owner leaving is refused by the caller with 400
+    `CANNOT_REMOVE_CHANNEL_OWNER` for the same reason as the group's admin:
+    `ERD.tex` makes `Channel : ChannelMember` a `1 : 1..N` relationship, and a
+    channel nobody can administer is not a shape the model allows.
+    """
+    if actor is None or not actor.is_authenticated:
+        return False
+    if actor == target:
+        return is_channel_member(actor, channel)
+    return has_permission(actor, channel, 'can_remove_member')
+
+
+def require_remove_channel_member(actor, channel, target):
+    """`may_remove_channel_member`, but raises so a view can call and continue."""
+    if not may_remove_channel_member(actor, channel, target):
+        raise PermissionDenied(messages.NO_PERMISSION)

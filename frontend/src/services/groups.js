@@ -97,7 +97,12 @@ export async function addMember(groupId, userId) {
   return response.data;
 }
 
-/** US-5.2 — remove a member. Admin only, and never the admin themselves. */
+/**
+ * US-5.2 — remove a member. The admin removes anybody; since A-10 a member
+ * may also remove **themselves**, which is how leaving is spelled — there is
+ * no separate leave endpoint. The admin still cannot be removed at all,
+ * themselves included: somebody has to hold the membership list.
+ */
 export async function removeMember(groupId, userId) {
   const response = await api.post(`groups/${groupId}/members/`, {
     user_id: userId,

@@ -22,6 +22,7 @@ from accounts.models import Profile
 from common import events, messages
 from common.mixins import ChannelScopedMixin
 from common.permissions import HasChannelPermission, IsChannelMember
+from roles import services as roles
 
 from .models import Channel, ChannelMember, Topic
 from .serializers import ChannelMemberSerializer, ChannelSerializer, TopicSerializer
@@ -243,16 +244,26 @@ class ChannelMemberListCreateView(ChannelScopedMixin, generics.ListCreateAPIView
 
 
 class ChannelMemberDetailView(ChannelScopedMixin, generics.DestroyAPIView):
-    """US-4.3 — remove a member from the channel.
+    """US-4.3 — remove a member from the channel, and A-10 — leave it.
 
     The owner cannot be removed: `ERD.tex` makes `Channel : ChannelMember` a
     `1 : 1..N` relationship, and removing the one member who implicitly holds
-    every permission would leave a channel nobody can administer.
+    every permission would leave a channel nobody can administer. That is a
+    statement about the channel's shape rather than about who is asking, which
+    is why it is a 400 here and not a refusal from `roles`.
+
+    **No `required_permission`, and that is the A-10 change.** The class-level
+    `HasChannelPermission` runs before `destroy` and answered 403 to a member
+    trying to leave, so SH.2's *"so that I do not end up in groups or channels I
+    do not want to join"* was enforced only up to the moment you were added.
+    Whether the caller may remove *this* member depends on which member it is,
+    so the question is asked once the URL has said — and it is still asked of
+    `roles` (architecture.tex §5.1), which is why there is no `== request.user`
+    comparison anywhere in this file.
     """
 
     serializer_class = ChannelMemberSerializer
-    permission_classes = [permissions.IsAuthenticated, HasChannelPermission]
-    required_permission = 'can_remove_member'
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
         return get_object_or_404(
@@ -261,6 +272,8 @@ class ChannelMemberDetailView(ChannelScopedMixin, generics.DestroyAPIView):
 
     def destroy(self, request, *args, **kwargs):
         membership = self.get_object()
+
+        roles.require_remove_channel_member(request.user, membership.channel, membership.user)
 
         if membership.channel.owner_id == membership.user_id:
             return Response(

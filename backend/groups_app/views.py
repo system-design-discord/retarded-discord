@@ -63,10 +63,15 @@ class GroupAddRemoveMemberView(APIView):
         group = get_object_or_404(Group, pk=pk)
 
         # architecture.tex §5.1: this module does not decide, it asks roles.
-        # The coarse gate runs before validation so a non-admin gets 403 rather
+        # The coarse gate runs before validation so a stranger gets 403 rather
         # than a hint about which parameters the endpoint wants.
-        if not any(roles.has_group_permission(request.user, group, p)
-                   for p in ('can_add_member', 'can_remove_member')):
+        #
+        # A-10 moved the removal half of this gate down past the body, and that
+        # is the whole of the change: leaving is removing yourself, so whether
+        # the caller may remove *anybody* cannot be answered before the request
+        # says who. Adding is unchanged — nobody adds themselves.
+        if not (roles.has_group_permission(request.user, group, 'can_add_member')
+                or roles.is_group_member(request.user, group)):
             return Response(
                 {"error": messages.ONLY_GROUP_ADMIN_MANAGES_MEMBERS},
                 status=status.HTTP_403_FORBIDDEN,
@@ -78,12 +83,13 @@ class GroupAddRemoveMemberView(APIView):
         if not user_id or action not in ['add', 'remove']:
             return Response({"error": messages.INVALID_PARAMETERS}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ...and then the permission that actually matches what was asked for.
-        roles.require_group_permission(
-            request.user, group, 'can_add_member' if action == 'add' else 'can_remove_member'
-        )
-
         target_user = get_object_or_404(User, pk=user_id)
+
+        # ...and then the permission that actually matches what was asked for.
+        if action == 'add':
+            roles.require_group_permission(request.user, group, 'can_add_member')
+        else:
+            roles.require_remove_group_member(request.user, group, target_user)
 
         if action == 'add':
             # US-5.4 / SH.2 — the target's own flag decides, not the admin's.

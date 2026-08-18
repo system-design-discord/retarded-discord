@@ -33,6 +33,34 @@ SEARCH_CONFIG = 'simple'
 SEARCH_VECTOR = SearchVector('text', config=SEARCH_CONFIG)
 
 
+def _prefix_tsquery(term):
+    """Build a `tsquery` that matches on a word's *start* — A-9.
+
+    `SearchQuery(term)` matches whole lexemes, so a search for `zebra` found
+    nothing in a conversation full of `zebracrossing`. US-9.1 is *"search
+    through message texts … so that I can quickly find the messages I am
+    looking for"*, and a chat search that answers nothing for a partial word
+    reads as broken.
+
+    The `simple` configuration is not the problem and does not change: it is a
+    deliberate choice for mixed Persian/English content (deviation 11), because
+    an `english` stemmer would mangle the Persian half. What was missing was any
+    prefix handling, and `:*` is how `tsquery` spells it.
+
+    `search_type='raw'` means this string reaches PostgreSQL as `tsquery`
+    syntax, so the term is data being written into a query language and is
+    escaped accordingly: every token is wrapped in single quotes, and a single
+    quote inside a token is doubled, which is `tsquery`'s own escape. Tokens are
+    ANDed, so a two-word search narrows rather than widens — the same behaviour
+    `plainto_tsquery` had.
+
+    The `:*` form still uses `GinIndex(SEARCH_VECTOR)`; there is no migration
+    here and no denormalised column.
+    """
+    tokens = [token for token in term.split() if token]
+    return ' & '.join(f"'{token.replace(chr(39), chr(39) * 2)}':*" for token in tokens)
+
+
 class MessageQuerySet(models.QuerySet):
     """Read scoping lives here so that every caller shares one definition.
 
@@ -119,7 +147,7 @@ class MessageQuerySet(models.QuerySet):
         if not term or not term.strip():
             return self.none()
 
-        query = SearchQuery(term, config=SEARCH_CONFIG)
+        query = SearchQuery(_prefix_tsquery(term), search_type='raw', config=SEARCH_CONFIG)
 
         return (
             self.annotate(search=SEARCH_VECTOR, rank=SearchRank(SEARCH_VECTOR, query))

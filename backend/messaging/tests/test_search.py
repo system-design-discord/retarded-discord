@@ -163,3 +163,65 @@ def test_results_are_paginated_like_every_other_list(auth_client, user, other_us
 @pytest.mark.django_db
 def test_search_needs_authentication(api_client):
     assert api_client.get(reverse('message-search'), {'q': 'pineapple'}).status_code == 401
+
+
+# --- partial words (A-9) ------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_a_partial_word_finds_the_whole_one(auth_client, user, other_user):
+    """The audit's reproduction: `zebracrossing` was found by `zebracrossing`
+    and by `ZEBRACROSSING`, and by `zebra` not at all."""
+    Message.objects.create(sender=user, recipient=other_user, text='mind the zebracrossing')
+
+    client = auth_client(user)
+
+    assert search(client, 'zebra').data['count'] == 1
+    assert search(client, 'ZEBRA').data['count'] == 1
+    assert search(client, 'zebracrossing').data['count'] == 1
+
+
+@pytest.mark.django_db
+def test_a_prefix_is_not_a_substring(auth_client, user, other_user):
+    """`:*` matches the start of a word, not any part of it. Worth pinning so
+    nobody later `%LIKE%`s this on the assumption that it already behaves that
+    way."""
+    Message.objects.create(sender=user, recipient=other_user, text='mind the zebracrossing')
+
+    assert search(auth_client(user), 'crossing').data['count'] == 0
+
+
+@pytest.mark.django_db
+def test_two_words_still_narrow_rather_than_widen(auth_client, user, other_user):
+    Message.objects.create(sender=user, recipient=other_user, text='the pineapple is ready')
+    Message.objects.create(sender=user, recipient=other_user, text='the pineapple is not here')
+
+    assert search(auth_client(user), 'pineapple ready').data['count'] == 1
+
+
+@pytest.mark.django_db
+def test_tsquery_syntax_in_the_box_is_data_and_not_a_query(auth_client, user, other_user):
+    """`search_type='raw'` hands the term to PostgreSQL as query syntax, so the
+    escaping has to hold. Each of these is a 200 with no hits, never a 500."""
+    Message.objects.create(sender=user, recipient=other_user, text='harmless')
+
+    for hostile in ["o'brien", "a & b", "a | b", "!x", "'", "a:*'|'b", "(", "<->"]:
+        response = search(auth_client(user), hostile)
+        assert response.status_code == 200, hostile
+
+
+@pytest.mark.django_db
+def test_an_apostrophe_still_finds_its_word(auth_client, user, other_user):
+    Message.objects.create(sender=user, recipient=other_user, text="o'brien was here")
+
+    assert search(auth_client(user), "o'brien").data['count'] == 1
+
+
+@pytest.mark.django_db
+def test_a_term_that_is_only_punctuation_is_empty_not_an_error(auth_client, user, other_user):
+    Message.objects.create(sender=user, recipient=other_user, text='hello')
+
+    response = search(auth_client(user), '   !  ')
+
+    assert response.status_code == 200
+    assert response.data['count'] == 0

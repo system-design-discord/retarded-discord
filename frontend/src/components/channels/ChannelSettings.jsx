@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useContext, useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import useChannel from '../../hooks/useChannel';
 import useChannelPermissions from '../../hooks/useChannelPermissions';
 import { CAN_EDIT_CHANNEL } from '../../lib/permissions';
 import NavSidebar from '../layout/NavSidebar';
 import AvatarField from '../common/AvatarField';
+import { useConfirm } from '../chat/primitives';
+import { AuthContext } from '../../context/AuthContext';
+import { removeMember as removeChannelMember } from '../../services/roles';
+import readApiError from '../../lib/apiError';
 
 // #125 — US-4.7 and US-6.1. The screen `can_edit_channel` was missing.
 //
@@ -30,6 +34,8 @@ import AvatarField from '../common/AvatarField';
 
 export default function ChannelSettings() {
   const { channelId } = useParams();
+  const navigate = useNavigate();
+  const { user } = useContext(AuthContext);
   const { channel, loading, error, setError, update } = useChannel(channelId);
   const { can, isOwner, loading: loadingPermissions } = useChannelPermissions(channelId);
 
@@ -41,6 +47,9 @@ export default function ChannelSettings() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Declared with the rest of the state and above the early returns below: a
+  // hook after an early return runs on some renders and not others.
+  const [confirm, confirmDialog] = useConfirm();
 
   const mayEdit = can(CAN_EDIT_CHANNEL);
 
@@ -78,6 +87,30 @@ export default function ChannelSettings() {
   // Settings screen draws. Same `updateChannel` write as the form above, so a
   // refused PATCH leaves the switch showing what is stored and not what was
   // clicked.
+  // A-10 — the other half of SH.2. Leaving used to go through the same gate as
+  // removing anybody else, so a member without `can_remove_member` — which is
+  // most of them — was refused their own exit. The owner is not offered it:
+  // `ERD.tex` makes `Channel : ChannelMember` a `1 : 1..N` relationship and the
+  // API answers 400.
+  const leave = async () => {
+    const confirmed = await confirm({
+      title: `Leave ${channel.name}?`,
+      body: 'You will stop seeing its topics and their messages. Somebody who can add members can put you back.',
+      confirmLabel: 'Leave channel',
+    });
+    if (!confirmed) return;
+
+    setBusy(true);
+    try {
+      await removeChannelMember(channelId, user.id);
+      navigate('/channels');
+    } catch (caught) {
+      setError(readApiError(caught, 'You could not be removed from this channel.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const toggleMediaRestriction = async (next) => {
     setBusy(true);
     setSaved(false);
@@ -258,6 +291,27 @@ export default function ChannelSettings() {
             </section>
           )}
 
+          {/* ------------------------------------------------ leaving */}
+          {!isOwner && (
+            <section className="bg-slate-900 border border-rose-900/50 rounded-2xl p-5 space-y-3">
+              <h2 className="text-xs font-bold uppercase text-rose-400 tracking-wider">
+                Leaving this channel
+              </h2>
+              <p className="text-xs text-slate-400">
+                Leaving takes you out and leaves the channel standing. The owner cannot leave —
+                somebody has to administer it.
+              </p>
+              <button
+                type="button"
+                onClick={leave}
+                disabled={busy}
+                className="border border-rose-900/60 text-rose-300 hover:bg-rose-950/40 font-semibold px-5 py-2 rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
+              >
+                Leave this channel
+              </button>
+            </section>
+          )}
+
           {/* ----------------------------------------------- danger zone */}
           <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-2">
             <h2 className="text-xs font-bold uppercase text-slate-400 tracking-wider">
@@ -278,6 +332,8 @@ export default function ChannelSettings() {
           </section>
         </div>
       </main>
+
+      {confirmDialog}
     </div>
   );
 }

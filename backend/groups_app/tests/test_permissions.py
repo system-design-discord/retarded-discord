@@ -84,13 +84,32 @@ def test_a_non_member_can_neither_edit_nor_delete_the_group(auth_client, outside
 
 
 @pytest.mark.django_db
-def test_a_non_admin_managing_members_gets_403_before_validation(auth_client, plain, group, outsider):
+def test_a_stranger_managing_members_gets_403_before_validation(auth_client, group, outsider):
     """Ordering matters: an unauthorised caller must not learn which parameters
-    the endpoint wanted."""
-    response = auth_client(plain).post(f'/api/groups/{group.pk}/members/', {}, format='json')
+    the endpoint wanted.
+
+    This used to be asserted of `plain`, an ordinary member, and A-10 moved the
+    line it is asserting. Leaving is removing yourself, so whether a *member*
+    may remove anybody cannot be answered until the body says who — a member
+    reaching validation is the point of that change, and is pinned below. The
+    property this test exists for is about somebody with no business here at
+    all, which is `outsider`, and it still holds.
+    """
+    response = auth_client(outsider).post(f'/api/groups/{group.pk}/members/', {}, format='json')
 
     assert response.status_code == 403
     assert 'error' in response.data
+
+
+@pytest.mark.django_db
+def test_a_member_reaches_validation_because_they_might_be_leaving(auth_client, plain, group):
+    """The A-10 consequence of the test above, stated rather than implied. A
+    member is not an unauthorised caller here any more: `roles` still refuses
+    them the moment the body names somebody other than themselves, which
+    `roles/tests/test_leaving.py` pins."""
+    response = auth_client(plain).post(f'/api/groups/{group.pk}/members/', {}, format='json')
+
+    assert response.status_code == 400
 
 
 @pytest.mark.django_db

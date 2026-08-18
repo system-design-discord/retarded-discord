@@ -2,6 +2,8 @@ import { useContext, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import useGroup from '../../hooks/useGroup';
 import { searchUsers } from '../../services/users';
+import { removeMember as removeGroupMember } from '../../services/groups';
+import readApiError from '../../lib/apiError';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
 import { Avatar, useConfirm } from '../chat/primitives';
@@ -54,6 +56,7 @@ export default function GroupSettings() {
   // A-3 — the picked file, held here rather than in `AvatarField`, because
   // `dirty` below has to count it.
   const [avatar, setAvatar] = useState(null);
+  const [leaving, setLeaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -141,6 +144,34 @@ export default function GroupSettings() {
     setBusyUserId(member.id);
     await removeMember(member.id);
     setBusyUserId(null);
+  };
+
+  // A-10 — the other half of SH.2. `allow_invites` keeps you out of a group you
+  // do not want to join; until this there was nothing that got you out of one
+  // you were already in, and this screen offered a Remove button on your own
+  // row that a non-admin could not use. The admin is deliberately not offered
+  // it: somebody has to administer the group, and the API answers 400.
+  const leave = async () => {
+    const confirmed = await confirm({
+      title: `Leave ${group.name}?`,
+      body:
+        'You will stop receiving its messages. Any member can add you back, if you let them.',
+      confirmLabel: 'Leave group',
+    });
+    if (!confirmed) return;
+
+    // Deliberately not `useGroup.removeMember`: that one refreshes the group
+    // after the write, and the group you have just left answers 404 to you —
+    // correctly, but it means firing a request for a resource you no longer
+    // have, and showing its refusal for the instant before the navigation.
+    setLeaving(true);
+    try {
+      await removeGroupMember(groupId, user.id);
+      navigate('/groups');
+    } catch (caught) {
+      setError(readApiError(caught, 'You could not be removed from this group.'));
+      setLeaving(false);
+    }
   };
 
   const destroy = async () => {
@@ -418,6 +449,23 @@ export default function GroupSettings() {
             <h2 className="text-xs font-bold uppercase text-rose-400 tracking-wider">
               Danger zone
             </h2>
+            {!isAdmin && (
+              <div className="space-y-2 pb-3 border-b border-slate-800">
+                <p className="text-xs text-slate-400">
+                  Leaving takes you out and leaves the group standing. The admin cannot leave —
+                  somebody has to hold the membership list.
+                </p>
+                <button
+                  type="button"
+                  onClick={leave}
+                  disabled={leaving}
+                  className="border border-rose-900/60 text-rose-300 hover:bg-rose-950/40 font-semibold px-5 py-2 rounded-xl text-sm transition cursor-pointer disabled:opacity-50"
+                >
+                  Leave this group
+                </button>
+              </div>
+            )}
+
             <p className="text-xs text-slate-400">
               Deleting the group removes every membership and every message in it, for everybody and
               not only for you. Any member can do this and nobody is asked first, so agree with them

@@ -34,10 +34,21 @@ class MessageSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
-        """Exactly one target — US-2.1 (DM), US-2.2 (group), US-2.3 (topic).
+        """Exactly one target, and something to say — US-2.1, US-2.2, US-2.3.
 
-        The same rule is enforced as a database check constraint, so a shell
-        script cannot create a shape the API refuses.
+        The target rule is enforced as a database check constraint too, so a
+        shell script cannot create a shape the API refuses.
+
+        A-8 added the content rule beside it. This serializer already owns "what
+        shape is a valid message", and a row with neither text nor an
+        attachment was accepted: it rendered as an empty bubble and fired a
+        "New message from …" notification for nothing. The SPA's composer has
+        always required text *or* a file, so only a direct API call reached it —
+        which is exactly the reason the check belongs on the serializer rather
+        than staying a property of one client.
+
+        **Text or media, not text.** `Message.text` is nullable on purpose
+        (#123): a media-only message is valid, and the composer relies on it.
         """
         targets = [field for field in TARGET_FIELDS if attrs.get(field)]
 
@@ -48,6 +59,12 @@ class MessageSerializer(serializers.ModelSerializer):
         if len(targets) > 1:
             raise serializers.ValidationError(
                 messages.MESSAGE_NEEDS_ONE_TARGET
+            )
+
+        text = (attrs.get('text') or '').strip()
+        if not text and not attrs.get('media_id'):
+            raise serializers.ValidationError(
+                messages.MESSAGE_NEEDS_CONTENT
             )
         return attrs
 
