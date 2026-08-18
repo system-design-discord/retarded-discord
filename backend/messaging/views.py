@@ -98,21 +98,15 @@ class MessageDetailView(generics.RetrieveUpdateDestroyAPIView):
 
         This used to be `filter(sender=self.request.user)`, which meant a direct
         message you *received* was unreadable, and an admin could not reach a
-        message in order to moderate it. 
-        We also explicitly include `is_delivered=False` messages authored by the 
-        requesting user, otherwise they get a 404 when trying to edit their own 
-        pending scheduled messages.
+        message in order to moderate it.
+
+        This is `readable_by`, not `visible_to`: it also admits the caller's own
+        *pending* scheduled messages, which no conversation view shows (SC-02)
+        and whose author would otherwise get a 404 editing their own schedule.
+        The queryset owns that distinction; this view only picks which of the two
+        scopes it wants.
         """
-        user = self.request.user
-        
-        # پیام‌های عادی و ارسال شده که کاربر حق دیدن آن‌ها را دارد
-        visible_messages = Message.objects.visible_to(user)
-        
-        # پیام‌های زمان‌بندی‌شده‌ای که خود کاربر نوشته ولی هنوز ارسال نشده‌اند
-        pending_scheduled = Message.objects.filter(sender=user, is_delivered=False)
-        
-        # ترکیب هر دو کوئری تا هم پیام‌های عادی لود شوند و هم زمان‌بندی‌شده‌های خودش
-        return (visible_messages | pending_scheduled).distinct()
+        return Message.objects.readable_by(self.request.user)
 
     def perform_update(self, serializer):
         """US-3.1 and US-3.2 — only the author, and `roles` says who that is.
