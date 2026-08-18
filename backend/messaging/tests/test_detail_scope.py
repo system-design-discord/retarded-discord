@@ -18,7 +18,6 @@ any one of those behaviours.
 """
 
 import pytest
-
 from django.utils import timezone
 
 from messaging.models import Message

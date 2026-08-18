@@ -13,6 +13,36 @@ channels[daphne]==4.3.2
 # one — see config/settings.py CHANNEL_LAYERS.
 channels-redis==4.3.0
 
+# `redis` is a *transitive* dependency of channels-redis, and pinning it here is
+# the point: channels-redis' floor is `redis>=4.6`, so without a pin the
+# resolver took whatever was newest on the day of the build. Two people building
+# the same commit a month apart got different channel-layer behaviour, which is
+# exactly what this file's header promises will not happen.
+#
+# The version matters and not only the reproducibility. On every ordinary
+# WebSocket teardown Channels' `await_many_dispatch` cancels the pending
+# `channel_receive`; under redis 8 that cancellation surfaces as a
+# `redis.exceptions.TimeoutError` rather than a `CancelledError`, and daphne
+# logs a 60-line "Exception inside application: Timeout reading from redis"
+# traceback for a socket that was already closing. Nothing is lost and no client
+# is affected — one audit session logged it 98 times while the whole real-time
+# suite passed — but it buries anything that does matter.
+#
+# Bisected on this stack, three sockets held 8s and closed, per version:
+#
+#     5.2.1  0 tracebacks      7.0.0  0 tracebacks
+#     5.3.0  0 tracebacks      8.0.0  6 tracebacks
+#     6.0.0  0 tracebacks      8.1.0  6 tracebacks
+#
+# So it is a redis 8 change, and 7.0.0 is the newest release that does not do
+# it. `config/logging_filters.py` drops the record as well, deliberately and
+# narrowly, so a machine that resolves past this pin is noisy in neither place.
+#
+# Explicitly *not* addressed by widening the Redis socket timeout: that changes
+# when the traceback appears, not whether it does. Revisit when channels-redis
+# handles the cancellation upstream.
+redis==7.0.0
+
 # PostgreSQL driver. US-9.1 full-text search needs Postgres, not SQLite.
 psycopg[binary]==3.3.4
 

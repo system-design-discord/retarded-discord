@@ -174,6 +174,28 @@ MEDIA_INTERNAL_LOCATION = os.environ.get(
 )
 
 
+# B-1 — one record dropped, on purpose and narrowly. See
+# `config/logging_filters.py` for what it drops and what it deliberately still
+# lets through, and `requirements.txt`'s `redis` pin for why it exists at all.
+#
+# `disable_existing_loggers` stays False and no handler is redefined: daphne
+# configures its own logging when it starts, and this only attaches a filter to
+# the logger that writes the record.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'suppress_redis_teardown_timeout': {
+            '()': 'config.logging_filters.SuppressRedisTeardownTimeout',
+        },
+    },
+    'loggers': {
+        'daphne.server': {
+            'filters': ['suppress_redis_teardown_timeout'],
+        },
+    },
+}
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
