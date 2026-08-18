@@ -16,15 +16,16 @@ somebody writes another one, `F-00` has been undone. Add a prop instead.
 | `Chat.jsx` | The conversation view. Takes a target (`kind` + `id`) and a little chrome — title, subtitle, an aside, a header slot — and renders it. Knows nothing about which kind it is showing. |
 | `primitives/Avatar.jsx` | Initial circle, sized by prop. |
 | `primitives/Timestamp.jsx` | The single date-formatting rule: a clock time today, a date as well when older. |
-| `primitives/MessageBubble.jsx` | Author, time, text, the `(edited)` marker, attached media, and the inline edit form. |
+| `primitives/MessageBubble.jsx` | Author, time, text, the `(edited)` marker, the attachment rendered as its own kind, and the inline edit form. |
 | `primitives/MessageList.jsx` | The scroll container and the three states a list actually has — loading, empty, populated. |
-| `primitives/MessageComposer.jsx` | Send and clear, and clear **only** once the server accepted it. Optional `onSchedule` adds the clock button. |
+| `primitives/MessageComposer.jsx` | Send and clear, and clear **only** once the server accepted it. Optional `onSchedule` adds the clock button; the paperclip picks a file. |
 | `ScheduleMessage.jsx` | `U-12`'s modal — pick a time, list what is pending, cancel one. |
 | `primitives/EmptyState.jsx` | The shared "nothing here yet" block. |
 | `primitives/ConfirmDialog.jsx` | The in-app confirmation for a destructive act, plus `useConfirm()`, which answers a promise of `true`/`false`. **No `window.confirm` anywhere in `src` (#139).** |
 | `../layout/NavSidebar.jsx` | The seven-link navigation, written once. |
 | `../../hooks/useConversation.js` | Load, send, edit and delete one conversation. |
 | `../../services/messages.js` | The only file that knows the message API's field names; exports `targetFor` / `targetOf`. |
+| `../../services/media.js` | The only file that knows the media API's shape: `uploadMedia`, the extension allowlist and the size cap. |
 | `../../services/scheduling.js` | The scheduled-message endpoints, and the `datetime-local` ↔ ISO conversion. |
 | `../../hooks/useScheduledMessages.js` | The pending list and the two writes, plus `pendingFor`. |
 | `../../lib/pagination.js` | `unwrapList` and `fetchAllPages`. |
@@ -70,6 +71,51 @@ Three things to know before you use it.
 There is no message endpoint nested under a channel or a group. A channel message is
 `POST /api/messages/` with a `topic`, read at `?topic_id=`; `channels/<id>/topics/<id>/messages/`
 does not exist and will not.
+
+## Attachments
+
+`#123` is the card, and what it closed was not a missing endpoint. `POST media/upload/` has worked
+since `A-07`, `MediaDetailView`'s scoping since `A-08`, the per-channel gate since `A-10`, and
+`services/messages.js#sendMessage` had taken a `mediaId` since it was written **that no caller ever
+passed**. Media sharing is `doc.tex` §4.7 and US-2.4 / US-7.1 / US-7.2 — mandatory, not bonus — and
+none of it was reachable from the product. It went unnoticed because `seed_data` attaches one file
+to one seeded message, so a walkthrough saw an attachment and reasonably concluded the feature
+worked.
+
+**The order is fixed by the API and it is two requests, not one.** Upload to `media/upload/`, take
+the `id` off the row that comes back, then pass it as `media_id` when creating the message. There is
+no one-shot "send a message with a file".
+
+**The upload happens in `useConversation`, not in the composer**, and that placement is the point.
+An attachment is two requests that must either both succeed or leave the screen untouched, so it
+belongs in the one place that owns `error` and that already holds the rule about state only ever
+moving to what the server returned. `send(text, file)` answers **`false` when nothing was sent**,
+which is what lets the composer keep the draft *and* the attachment on a refusal — the same "clear
+only on success" rule `#78` bought, extended to cover the file.
+
+**A topic upload names its topic.** `MediaUploadView.perform_create` reads an optional `topic` from
+the multipart body so `roles.require_send_media` runs at the moment of upload; without it the
+restriction is checked only when the message is created, which leaves a file the server accepted and
+a message it then refuses. A DM and a group send no topic, because neither has a channel and neither
+has a restriction to evaluate. `messaging.views` checks it again at attach time regardless — an
+upload need not declare a topic, so a single gate would be a bypass.
+
+**`file_type` is the server's word.** `MediaFile.save()` overwrites whatever the browser claimed with
+one of `image`, `video`, `audio` or `document`, derived from the extension. `MessageBubble` branches
+on it: an image renders inline and links through to the original, video and audio get players, and a
+document keeps the paperclip-and-filename link. Before `#123` all four rendered as the last of those,
+so an image was a paperclip.
+
+**A media-only message is legitimate.** `Message.text` is `blank=True, null=True` and the serializer
+does not require it, so the composer's submit guard is "text **or** a file", not "text".
+
+Two limits are the server's and are mirrored locally in `services/media.js` — the extension allowlist
+from `MediaFileSerializer.validate_file` and the 10MB cap from `media_app.models.MAX_UPLOAD_MB`.
+Refusing early saves sending megabytes that were always going to 400, and names the file rather than
+reporting a field error keyed `file`. It is not the check; nginx caps the body at 12MB besides.
+
+The one thing an attachment cannot do is be scheduled: `ScheduleMessage` is handed a draft string,
+so the clock button is disabled while a file is picked rather than silently dropping it.
 
 ## What this layer does not decide
 
@@ -143,6 +189,9 @@ the exponential backoff with jitter, and the single token refresh a `4401` earns
 `POST /api/messages/`. Two rules in the hook are load-bearing: messages are **deduped by id**,
 because a direct message's channel-layer group is symmetric and fans back to its own sender, and
 they are **re-sorted by `created_at`**, because a frame can arrive after a later one.
+
+The attach path goes through `receive` as well, for the same reason: an attachment is still one
+message, and it is the socket frame that usually shows it first.
 
 **Both rules apply to the HTTP path too, and `send` is where they were missing** (#137). It appended
 the created row unconditionally while `receive` deduped, so the author — and only the author — saw
