@@ -17,7 +17,10 @@ import { fetchAllPages } from '../lib/pagination';
 //     them — role names are unique per channel (`unique_role_name_per_channel`),
 //     which is what makes that safe.
 //   * **`role: null` clears a member's role**, it does not remove them from the
-//     channel. Removal is `channels_app`'s endpoint and a different permission.
+//     channel. Removal is `channels_app`'s endpoint and a different permission —
+//     `removeMember` below, gated on `can_remove_member` rather than
+//     `can_change_role`. Both live here because this is already the only file
+//     naming `channels/<id>/members/`, and a second one would drift (#142).
 //
 // Hiding a control is not a permission check. Everything here is refused by the
 // server as well, and INT-2's matrix exercises exactly these paths with the UI
@@ -89,6 +92,38 @@ export async function assignRole(channelId, userId, roleId) {
     role: roleId ?? null,
   });
   return response.data;
+}
+
+/**
+ * US-4.4 / SH.1 — add somebody to this channel. Needs `can_add_member`.
+ *
+ * Direct, not an invitation: SH.1 records the team's decision to add users
+ * straight in rather than through a link. **SH.2 is the other half of that
+ * decision** — the target's own `allow_invites` can refuse, and it answers 403
+ * naming them. That refusal is not predictable from here: `PublicUserSerializer`
+ * withholds the flag on purpose, so the directory cannot tell an inviter in
+ * advance whether the invitation would be accepted.
+ *
+ * Adding somebody already in the channel is a 400, not a cheerful no-op — which
+ * is the opposite of how `groups_app` answers the same mistake.
+ */
+export async function addMember(channelId, userId) {
+  const response = await api.post(`channels/${channelId}/members/`, { user_id: userId });
+  return response.data;
+}
+
+/**
+ * US-4.3 — remove somebody from this channel. Needs `can_remove_member`.
+ *
+ * The owner cannot be removed and the server answers 400 saying so: `ERD.tex`
+ * makes `Channel : ChannelMember` a `1 : 1..N`, and removing the one member who
+ * implicitly holds every permission would leave a channel nobody can administer.
+ *
+ * Distinct from clearing a role, which is `assignRole(…, null)` above: that
+ * leaves them in the channel holding nothing, this takes them out of it.
+ */
+export function removeMember(channelId, userId) {
+  return api.delete(`channels/${channelId}/members/${userId}/`);
 }
 
 /**
