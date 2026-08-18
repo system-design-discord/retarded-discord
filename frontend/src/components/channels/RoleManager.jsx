@@ -4,12 +4,11 @@ import useChannelPermissions from '../../hooks/useChannelPermissions';
 import useChannelRoles from '../../hooks/useChannelRoles';
 import {
   CAN_ADD_MEMBER,
-  CAN_EDIT_CHANNEL,
   CAN_REMOVE_MEMBER,
   PERMISSIONS,
   PERMISSION_KEYS,
 } from '../../lib/permissions';
-import { getChannel, updateChannel } from '../../services/channels';
+import { getChannel } from '../../services/channels';
 import { searchUsers } from '../../services/users';
 import NavSidebar from '../layout/NavSidebar';
 import { Avatar, EmptyState, useConfirm } from '../chat/primitives';
@@ -35,6 +34,12 @@ import { Avatar, EmptyState, useConfirm } from '../chat/primitives';
 // US-8.2 is why the toggles are gated by what *you* hold: "assign various
 // capabilities that fall within my own permissions". `RoleSerializer.validate`
 // enforces it and answers 400 per offending field; the messages surface here.
+//
+// **The media restriction toggle used to live here and does not any more**
+// (#125). It is a property of the channel, not of a role, and it sat here only
+// because `A-10` had no channel settings screen to put it on. It is at
+// `/channels/<id>/settings` now, beside the name and the description, which is
+// where the wireframe draws it and where a reader looks for it.
 //
 // **#142 put membership on this screen**, and it follows `GroupSettings.jsx`
 // rather than inventing a second pattern: the same `services/users.js` directory
@@ -210,28 +215,6 @@ export default function RoleManager() {
 
   const [confirm, confirmDialog] = useConfirm();
 
-  // A-10 — the media restriction is a plain field on the channel, so the
-  // existing `updateChannel` is the whole write. No new service function.
-  const mayEditChannel = can(CAN_EDIT_CHANNEL);
-
-  const toggleMediaRestriction = (next) =>
-    run(async () => {
-      try {
-        // Move state only to what the server returned, the same rule
-        // `useChannelRoles` follows: a refused PATCH must leave the switch
-        // showing what is actually stored, not what was clicked.
-        const updated = await updateChannel(channelId, { media_restricted: next });
-        setChannel(updated);
-        setError('');
-      } catch (caught) {
-        setError(
-          caught?.response?.status === 403
-            ? 'Changing the media restriction needs can_edit_channel, which you do not hold.'
-            : 'The media restriction could not be changed.',
-        );
-      }
-    });
-
   useEffect(() => {
     getChannel(channelId)
       .then(setChannel)
@@ -332,34 +315,6 @@ export default function RoleManager() {
               </button>
             )}
           </div>
-        )}
-
-        {/* A-10 / US-2.4 — the per-channel media restriction. Rendered only for
-            holders of can_edit_channel, which is a courtesy and not the check:
-            the server refuses the PATCH regardless of what this shows, and the
-            acceptance criterion is verified with this UI bypassed. */}
-        {mayEditChannel && channel && (
-          <section className="max-w-2xl mb-6 rounded-xl border border-slate-800 bg-slate-900 p-4">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                className="mt-1 accent-indigo-500"
-                checked={Boolean(channel.media_restricted)}
-                disabled={busy}
-                onChange={(event) => toggleMediaRestriction(event.target.checked)}
-              />
-              <span className="min-w-0">
-                <span className="block text-sm font-medium text-slate-200">
-                  Restrict media in this channel
-                </span>
-                <span className="block text-xs text-slate-500 mt-0.5 break-words">
-                  {channel.media_restricted
-                    ? 'On — only members whose role grants can_send_media may send files. You are the owner or hold it yourself, so you are unaffected.'
-                    : 'Off — every member of this channel may send files, the same as text.'}
-                </span>
-              </span>
-            </label>
-          </section>
         )}
 
         {loadingPermissions ? (

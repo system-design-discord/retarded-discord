@@ -36,6 +36,7 @@ export default function ChannelSettings() {
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const mayEdit = can(CAN_EDIT_CHANNEL);
 
@@ -58,6 +59,18 @@ export default function ChannelSettings() {
     const failure = await update({ name: name.trim(), description: description.trim() });
     setSaving(false);
     setSaved(!failure);
+  };
+
+  // A-10's toggle, moved here from the role manager: it is a property of the
+  // channel rather than of a role, and it is what the wireframe's Channel
+  // Settings screen draws. Same `updateChannel` write as the form above, so a
+  // refused PATCH leaves the switch showing what is stored and not what was
+  // clicked.
+  const toggleMediaRestriction = async (next) => {
+    setBusy(true);
+    setSaved(false);
+    await update({ media_restricted: next });
+    setBusy(false);
   };
 
   if (loading || loadingPermissions) {
@@ -183,6 +196,49 @@ export default function ChannelSettings() {
                   half-built. */}
               <p className="text-xs text-slate-500">
                 The channel image is not editable here yet. Name and description are.
+              </p>
+            </section>
+          )}
+
+          {/* ------------------------------------------ permission defaults */}
+          {mayEdit && (
+            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+              <h2 className="text-xs font-bold uppercase text-slate-400 tracking-wider">
+                Permission defaults
+              </h2>
+
+              {/* A-10 / US-2.4. Since #123 this governs something observable —
+                  the attach control in the topic conversation — where before it
+                  restricted an action no user could perform. */}
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1 accent-indigo-500"
+                  checked={Boolean(channel.media_restricted)}
+                  disabled={busy}
+                  onChange={(event) => toggleMediaRestriction(event.target.checked)}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-slate-200">
+                    Restrict media in this channel
+                  </span>
+                  <span className="block text-xs text-slate-500 mt-0.5 break-words">
+                    {channel.media_restricted
+                      ? 'On — only members whose role grants can_send_media may attach files. You are the owner or hold it yourself, so you are unaffected.'
+                      : 'Off — every member of this channel may attach files, the same as text.'}
+                  </span>
+                </span>
+              </label>
+
+              <p className="text-xs text-slate-500">
+                Which roles grant <code className="text-slate-300">can_send_media</code> is set on{' '}
+                <Link
+                  to={`/channels/${channelId}/roles`}
+                  className="text-indigo-400 hover:text-indigo-300"
+                >
+                  the roles screen
+                </Link>
+                .
               </p>
             </section>
           )}
