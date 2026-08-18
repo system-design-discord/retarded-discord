@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { createTopic, deleteTopic, getChannel, updateChannel } from '../services/channels';
+import {
+  createTopic,
+  deleteTopic,
+  getChannel,
+  updateChannel,
+  updateTopic,
+} from '../services/channels';
 import { readApiError } from '../lib/apiError';
 
 // One channel and its topics.
@@ -89,6 +95,22 @@ export default function useChannel(channelId) {
     [channelId, refresh],
   );
 
+  /** Rename a topic. Returns it, or `null` if the server refused (#126). */
+  const renameTopic = useCallback(
+    async (topicId, name) => {
+      try {
+        const renamed = await updateTopic(channelId, topicId, { name });
+        await refresh();
+        setError('');
+        return renamed;
+      } catch (caught) {
+        setError(readApiError(caught, 'The topic could not be renamed.'));
+        return null;
+      }
+    },
+    [channelId, refresh],
+  );
+
   /** Delete a topic. Answers how many messages went with it (C-03), or null. */
   const removeTopic = useCallback(
     async (topicId) => {
@@ -105,5 +127,16 @@ export default function useChannel(channelId) {
     [channelId, refresh],
   );
 
-  return { channel, topics, loading, error, setError, refresh, update, addTopic, removeTopic };
+  return {
+    channel,
+    topics,
+    loading,
+    error,
+    setError,
+    refresh,
+    update,
+    addTopic,
+    renameTopic,
+    removeTopic,
+  };
 }
