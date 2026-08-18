@@ -411,9 +411,14 @@ export default function ChannelView() {
                   {members.map((member) => (
                     <div key={member.id} className="flex items-center gap-2.5 p-2 rounded-lg">
                       <Avatar name={member.user?.username} size="sm" />
-                      <span className="text-sm text-slate-300 truncate">
+                      {/* A-4 — a channel you share is as good a reason to look
+                          somebody up as a conversation you have had. */}
+                      <Link
+                        to={`/profile/${member.user?.id}`}
+                        className="text-sm text-slate-300 truncate hover:text-indigo-400 transition"
+                      >
                         {member.user?.username}
-                      </span>
+                      </Link>
                       {member.is_owner ? (
                         <span className="ml-auto text-[10px] uppercase tracking-wide text-amber-500">
                           owner

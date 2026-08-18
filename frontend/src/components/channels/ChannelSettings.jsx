@@ -4,6 +4,7 @@ import useChannel from '../../hooks/useChannel';
 import useChannelPermissions from '../../hooks/useChannelPermissions';
 import { CAN_EDIT_CHANNEL } from '../../lib/permissions';
 import NavSidebar from '../layout/NavSidebar';
+import AvatarField from '../common/AvatarField';
 
 // #125 — US-4.7 and US-6.1. The screen `can_edit_channel` was missing.
 //
@@ -34,6 +35,9 @@ export default function ChannelSettings() {
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  // A-3 — the picked file, held here rather than in `AvatarField`, because
+  // `dirty` below has to count it.
+  const [avatar, setAvatar] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -45,10 +49,17 @@ export default function ChannelSettings() {
   useEffect(() => {
     setName(channel?.name ?? '');
     setDescription(channel?.description ?? '');
+    setAvatar(null);
   }, [channel]);
 
+  // A picked file counts toward `dirty`, or the Save button stays disabled with
+  // an image sitting in the form — the screen would look like it worked and
+  // store nothing, which is #104 exactly.
   const dirty =
-    channel && (name !== (channel.name ?? '') || description !== (channel.description ?? ''));
+    channel &&
+    (name !== (channel.name ?? '') ||
+      description !== (channel.description ?? '') ||
+      Boolean(avatar));
 
   const save = async (event) => {
     event.preventDefault();
@@ -56,7 +67,8 @@ export default function ChannelSettings() {
 
     setSaving(true);
     setSaved(false);
-    const failure = await update({ name: name.trim(), description: description.trim() });
+    const fields = { name: name.trim(), description: description.trim() };
+    const failure = await update(avatar ? { ...fields, avatar } : fields);
     setSaving(false);
     setSaved(!failure);
   };
@@ -176,6 +188,18 @@ export default function ChannelSettings() {
                   />
                 </div>
 
+                {/* A-3 — US-4.7 and US-6.1 name three fields; this is the
+                    third, and the one the paragraph that used to sit below this
+                    form apologised for. */}
+                <AvatarField
+                  id="channel-avatar"
+                  label="Image"
+                  currentUrl={channel.avatar}
+                  file={avatar}
+                  onPick={setAvatar}
+                  hint="Anyone who can edit the channel can change its image."
+                />
+
                 <div className="flex items-center gap-3">
                   <button
                     type="submit"
@@ -188,15 +212,6 @@ export default function ChannelSettings() {
                 </div>
               </form>
 
-              {/* The avatar is the third field `ChannelSerializer` accepts and
-                  the one this screen does not offer. It is a file upload rather
-                  than a text field, and #104 is the cautionary tale about
-                  wiring one of those halfway; US-4.7 and US-6.1 are satisfied
-                  by name and description, so it stays out rather than going in
-                  half-built. */}
-              <p className="text-xs text-slate-500">
-                The channel image is not editable here yet. Name and description are.
-              </p>
             </section>
           )}
 

@@ -1,4 +1,5 @@
 import api from './api';
+import { toRequestBody } from '../lib/multipart';
 
 // The one place in the SPA that knows the own-profile API's shape.
 //
@@ -81,18 +82,5 @@ export async function getPublicProfile(userId) {
  * seeding its state from its own form and drifting from the database.
  */
 export async function updateMyProfile(fields) {
-  const { avatar, ...rest } = fields;
-
-  if (!(avatar instanceof File)) {
-    const body = avatar === undefined ? rest : { ...rest, avatar };
-    return normalizeProfile((await api.patch('profile/', body)).data);
-  }
-
-  const form = new FormData();
-  Object.entries(rest).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) form.append(key, value);
-  });
-  form.append('avatar', avatar);
-
-  return normalizeProfile((await api.patch('profile/', form)).data);
+  return normalizeProfile((await api.patch('profile/', toRequestBody(fields))).data);
 }

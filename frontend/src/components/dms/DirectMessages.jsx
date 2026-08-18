@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { listDirectMessages } from '../../services/messages';
 import { searchUsers } from '../../services/users';
 import { conversationsFrom, nameMissingPartners } from '../../hooks/useRecentChats';
@@ -27,7 +27,6 @@ import { Avatar, EmptyState } from '../chat/primitives';
 
 export default function DirectMessages() {
   const { user } = useContext(AuthContext);
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [conversations, setConversations] = useState([]);
@@ -41,6 +40,15 @@ export default function DirectMessages() {
   // block below needs to know which of the two it is looking at. Without this
   // a search that found nobody drew nothing at all and read as a broken search.
   const [searched, setSearched] = useState(false);
+  // A-7 — the person you just picked out of the directory.
+  //
+  // `active` used to resolve an unknown partner's name out of `candidates`,
+  // and `open()` empties `candidates` one line before it is needed. So clicking
+  // a search hit put "User 9" in the header, the placeholder and the empty
+  // hint, and it never corrected itself: `conversations` cannot name somebody
+  // you have never exchanged a message with, and nothing re-read anything.
+  // Keeping the one row that has the answer is cheaper than fetching it back.
+  const [picked, setPicked] = useState(null);
 
   // `?user=<id>` is what SearchMessages links a direct-message hit to, so the
   // deep link and the sidebar selection are the same piece of state.
@@ -76,11 +84,16 @@ export default function DirectMessages() {
   }, [activeId, conversations, setSearchParams]);
 
   const active = useMemo(() => {
+    if (!activeId) return null;
     const known = conversations.find((conversation) => conversation.id === activeId);
     if (known) return known;
-    const candidate = candidates.find((person) => person.id === activeId);
-    return activeId ? { id: activeId, username: candidate?.username ?? `User ${activeId}` } : null;
-  }, [conversations, candidates, activeId]);
+    const named =
+      candidates.find((person) => person.id === activeId) ??
+      (picked?.id === activeId ? picked : null);
+    // `User <id>` stays as the last resort: a deep link can name somebody this
+    // screen has never listed and never searched for.
+    return { id: activeId, username: named?.username ?? `User ${activeId}` };
+  }, [conversations, candidates, picked, activeId]);
 
   const search = async (event) => {
     event.preventDefault();
@@ -101,6 +114,8 @@ export default function DirectMessages() {
   };
 
   const open = (id) => {
+    // Remember who this is before the list holding their name is thrown away.
+    setPicked(candidates.find((person) => person.id === id) ?? null);
     setSearchParams({ user: String(id) });
     setCandidates([]);
     setSearched(false);
@@ -202,6 +217,12 @@ export default function DirectMessages() {
         </div>
       </aside>
 
+      {/* A-7 — `onSent` re-reads the conversation list. A first message to
+          somebody new creates a thread the left rail has never heard of, and
+          `loadConversations` ran once on mount: the rail said "No conversations
+          yet" beside the conversation you were looking at until the page was
+          reloaded. That reads as a "no manual refresh" failure in the one SPA
+          that satisfies US-B1.1 in three places. */}
       {active ? (
         <Chat
           key={active.id}
@@ -210,6 +231,7 @@ export default function DirectMessages() {
           highlightMessageId={highlight}
           title={active.username}
           subtitle="Direct message"
+          onSent={loadConversations}
           headerExtra={
             <>
               {/* #101 — the one way into another user's profile. The route
@@ -217,13 +239,16 @@ export default function DirectMessages() {
                   branch and the Message button #130 put on it were both
                   unreachable. The conversation header is where the person
                   you are reading is already named. */}
-              <button
-                type="button"
-                onClick={() => navigate(`/profile/${active.id}`)}
+              {/* A-4 — an anchor rather than a `navigate()`, so this is a
+                  link a reader can middle-click, and so "how many ways into a
+                  profile does this screen offer" is answerable by looking at
+                  the document rather than at the handlers. */}
+              <Link
+                to={`/profile/${active.id}`}
                 className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer shrink-0"
               >
                 View profile
-              </button>
+              </Link>
               <button
                 type="button"
                 onClick={() => setSearchParams({})}

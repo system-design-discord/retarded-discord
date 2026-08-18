@@ -1,5 +1,6 @@
 import api from './api';
 import { fetchAllPages } from '../lib/pagination';
+import { toRequestBody } from '../lib/multipart';
 
 // The one place in the SPA that knows the channel and topic API's shape.
 //
@@ -53,7 +54,10 @@ export async function createChannel(body) {
 
 /** US-4.7 / US-6.1 — rename or re-describe a channel. Needs `can_edit_channel`. */
 export async function updateChannel(channelId, body) {
-  const response = await api.patch(`channels/${channelId}/`, body);
+  // A `File` under `avatar` promotes the write to multipart; anything else
+  // stays JSON. `lib/multipart` owns that branch so this file and the two
+  // beside it cannot disagree about it.
+  const response = await api.patch(`channels/${channelId}/`, toRequestBody(body));
   return response.data;
 }
 

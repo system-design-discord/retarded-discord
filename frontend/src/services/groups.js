@@ -1,5 +1,6 @@
 import api from './api';
 import { fetchAllPages } from '../lib/pagination';
+import { toRequestBody } from '../lib/multipart';
 
 // The one place in the SPA that knows the group API's shape.
 //
@@ -66,7 +67,10 @@ export async function createGroup(body) {
  *  `can_edit_channel`, which is the permission name a group reuses because it
  *  has no role table of its own. */
 export async function updateGroup(groupId, body) {
-  const response = await api.patch(`groups/${groupId}/`, body);
+  // A `File` under `avatar` promotes the write to multipart; anything else
+  // stays JSON. `lib/multipart` owns that branch so this file and the two
+  // beside it cannot disagree about it.
+  const response = await api.patch(`groups/${groupId}/`, toRequestBody(body));
   return response.data;
 }
 

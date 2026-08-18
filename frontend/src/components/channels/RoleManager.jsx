@@ -426,7 +426,14 @@ export default function RoleManager() {
                       >
                         <Avatar name={member.user.username} size="sm" />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-medium truncate">{member.user.username}</span>
+                          {/* A-4 — the third member list that named a person
+                            and offered no way to look them up. */}
+                        <Link
+                          to={`/profile/${member.user.id}`}
+                          className="block text-sm font-medium truncate hover:text-indigo-400 transition"
+                        >
+                          {member.user.username}
+                        </Link>
                           {member.is_owner && (
                             <span className="block text-[10px] uppercase tracking-wider text-amber-500">
                               Owner · holds all eight

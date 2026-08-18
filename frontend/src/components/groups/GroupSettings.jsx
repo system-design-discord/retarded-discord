@@ -5,6 +5,7 @@ import { searchUsers } from '../../services/users';
 import { AuthContext } from '../../context/AuthContext';
 import NavSidebar from '../layout/NavSidebar';
 import { Avatar, useConfirm } from '../chat/primitives';
+import AvatarField from '../common/AvatarField';
 
 // U-10 — US-5.2 and US-6.4. `M-05` delivered both server-side in Sprint 2 and
 // they have been demonstrable only against curl since; this is the screen.
@@ -50,6 +51,9 @@ export default function GroupSettings() {
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  // A-3 — the picked file, held here rather than in `AvatarField`, because
+  // `dirty` below has to count it.
+  const [avatar, setAvatar] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -74,9 +78,15 @@ export default function GroupSettings() {
   useEffect(() => {
     setName(group?.name ?? '');
     setDescription(group?.description ?? '');
+    setAvatar(null);
   }, [group]);
 
-  const dirty = group && (name !== (group.name ?? '') || description !== (group.description ?? ''));
+  // A picked file counts. Leave it out and the Save button stays disabled with
+  // an image sitting in the form — the screen would look like it worked and
+  // store nothing (#104).
+  const dirty =
+    group &&
+    (name !== (group.name ?? '') || description !== (group.description ?? '') || Boolean(avatar));
 
   const save = async (event) => {
     event.preventDefault();
@@ -84,7 +94,8 @@ export default function GroupSettings() {
 
     setSaving(true);
     setSaved(false);
-    const failure = await update({ name: name.trim(), description: description.trim() });
+    const fields = { name: name.trim(), description: description.trim() };
+    const failure = await update(avatar ? { ...fields, avatar } : fields);
     setSaving(false);
     setSaved(!failure);
   };
@@ -246,6 +257,16 @@ export default function GroupSettings() {
                 />
               </div>
 
+              {/* A-3 — US-6.4 names three fields and this is the third. */}
+              <AvatarField
+                id="group-avatar"
+                label="Image"
+                currentUrl={group.avatar}
+                file={avatar}
+                onPick={setAvatar}
+                hint="Any member can change the group's image."
+              />
+
               <div className="flex items-center gap-3">
                 <button
                   type="submit"
@@ -270,7 +291,18 @@ export default function GroupSettings() {
                 >
                   <Avatar name={member.username} size="sm" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm text-slate-200 truncate">{member.username}</div>
+                    {/* A-4 — US-10.2's whole justification is "so that I can
+                        better identify my contacts", and until this the only
+                        way to another user's profile in the entire SPA was the
+                        View profile button on a direct-message header. You
+                        could look up somebody you had already messaged and
+                        nobody you merely shared a group with. */}
+                    <Link
+                      to={`/profile/${member.id}`}
+                      className="block text-sm text-slate-200 truncate hover:text-indigo-400 transition"
+                    >
+                      {member.username}
+                    </Link>
                   </div>
                   {member.id === admin?.id && (
                     <span className="text-[10px] uppercase tracking-wide text-indigo-400 shrink-0">

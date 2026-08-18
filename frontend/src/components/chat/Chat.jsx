@@ -43,9 +43,29 @@ export default function Chat({
   // the attach whatever the composer draws.
   canSendMedia = true,
   mediaRestrictionReason = '',
+  // A-7 — told when a message actually went out. `DirectMessages` is the only
+  // shell that needs it, because it derives its own conversation list on the
+  // client and a brand-new thread is not in that list until something re-reads
+  // it. The other two shells navigate to a group or a topic that already
+  // exists, so they pass nothing and behave exactly as before.
+  onSent,
 }) {
   const { user } = useContext(AuthContext);
-  const { messages, loading, error, live, send, edit, remove } = useConversation(kind, id);
+  const {
+    messages,
+    loading,
+    error,
+    live,
+    send: sendMessage,
+    edit,
+    remove,
+  } = useConversation(kind, id);
+
+  const send = async (text, file = null) => {
+    const sent = await sendMessage(text, file);
+    if (sent) onSent?.();
+    return sent;
+  };
 
   const [scheduling, setScheduling] = useState(false);
   const [draft, setDraft] = useState('');
